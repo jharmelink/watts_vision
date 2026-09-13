@@ -26,10 +26,12 @@ FAULTY_DEVICE = {
 RECEIVER_DEVICE = {
     "id": "device-receiver",
     "id_device": "id-device-receiver",
+    "nom_appareil": "nouvel appareil",
+    "label_interface": "nouvel appareil",
     "temperature_air": "536",
     "gv_mode": "0",
-    "heating_up": "1",
-    "heat_cool": "0",
+    "heating_up": None,
+    "heat_cool": None,
     "error_code": 0,
     "min_set_point": None,
     "max_set_point": None,
@@ -43,7 +45,10 @@ RECEIVER_DEVICE = {
 ZONES = [
     {
         "zone_label": "Woonkamer",
-        "devices": [copy.deepcopy(MOCK_DEVICE), copy.deepcopy(RECEIVER_DEVICE)],
+        "devices": [
+            {**copy.deepcopy(MOCK_DEVICE), "nom_appareil": "Verwarm.Therm"},
+            copy.deepcopy(RECEIVER_DEVICE),
+        ],
     },
     {"zone_label": "Studio", "devices": [copy.deepcopy(FAULTY_DEVICE)]},
 ]
@@ -57,7 +62,7 @@ async def loaded(hass: HomeAssistant):
 
 async def test_a_healthy_thermostat_reports_celsius(hass: HomeAssistant, loaded):
     """689 deci-Fahrenheit is 20.5 C, and that is what the entity reports."""
-    state = hass.states.get("climate.thermostat_woonkamer")
+    state = hass.states.get("climate.thermostat_woonkamer_verwarm_therm")
     assert state is not None
     assert state.attributes["temperature"] == pytest.approx(20.5)
     assert state.attributes["current_temperature"] == pytest.approx(20.5)
@@ -87,15 +92,17 @@ async def test_a_faulty_device_reports_a_problem(hass: HomeAssistant, loaded):
     assert state is not None
     assert state.state == "on"
 
-    healthy = hass.states.get("binary_sensor.thermostat_woonkamer_problem_woonkamer")
+    healthy = hass.states.get(
+        "binary_sensor.thermostat_woonkamer_verwarm_therm_problem_woonkamer_verwarm_therm"
+    )
     assert healthy.state == "off"
 
 
 async def test_a_receiver_gets_no_thermostat(hass: HomeAssistant, loaded):
     """Null setpoints are not setpoints, and a presence check would miss that."""
-    assert hass.states.get("climate.thermostat_woonkamer_2") is None
+    assert hass.states.get("climate.thermostat_woonkamer") is None
     assert (
-        hass.states.get("sensor.thermostat_woonkamer_target_temperature_woonkamer_2")
+        hass.states.get("sensor.thermostat_woonkamer_target_temperature_woonkamer")
         is None
     )
 
@@ -105,18 +112,18 @@ async def test_a_receiver_keeps_the_entities_it_can_support(
 ):
     """It loses only what it cannot have, and by decision rather than by crash."""
     assert (
-        hass.states.get("sensor.thermostat_woonkamer_air_temperature_woonkamer_2")
+        hass.states.get("sensor.thermostat_woonkamer_air_temperature_woonkamer")
         is not None
     )
     assert (
-        hass.states.get("sensor.thermostat_woonkamer_heating_mode_woonkamer_2")
+        hass.states.get("sensor.thermostat_woonkamer_heating_mode_woonkamer")
         is not None
     )
     assert (
-        hass.states.get("binary_sensor.thermostat_woonkamer_heating_woonkamer_2")
+        hass.states.get("binary_sensor.thermostat_woonkamer_heating_woonkamer")
         is not None
     )
-    assert hass.states.get("sensor.thermostat_woonkamer_error_woonkamer_2") is not None
+    assert hass.states.get("sensor.thermostat_woonkamer_error_woonkamer") is not None
 
 
 async def test_climate_and_sensor_agree_on_the_target(hass: HomeAssistant, loaded):
@@ -127,7 +134,7 @@ async def test_climate_and_sensor_agree_on_the_target(hass: HomeAssistant, loade
     A setpoint is configuration the cloud holds, not a measurement the device
     makes, so it stays knowable while the device is silent.
     """
-    for zone in ("woonkamer", "studio"):
+    for zone in ("woonkamer_verwarm_therm", "studio"):
         climate = hass.states.get(f"climate.thermostat_{zone}")
         sensor = hass.states.get(f"sensor.thermostat_{zone}_target_temperature_{zone}")
         assert climate is not None and sensor is not None
@@ -158,3 +165,33 @@ async def test_no_entity_publishes_nan(hass: HomeAssistant, loaded):
     """`if self._state != NaN` was always true, so nan reached the state."""
     for state in hass.states.async_all():
         assert state.state.lower() != "nan"
+
+
+async def test_a_device_that_never_reports_heating_says_so(hass: HomeAssistant, loaded):
+    """The receiver reports heating_up as null, not as "0".
+
+    Comparing null against "0" came out unequal, so the sensor read on while
+    the thermostat beside it read off.
+    """
+    state = hass.states.get("binary_sensor.thermostat_woonkamer_heating_woonkamer")
+    assert state is not None
+    assert state.state == "unavailable"
+
+
+async def test_devices_sharing_a_zone_are_named_by_the_device(
+    hass: HomeAssistant, loaded
+):
+    """Not by whichever Home Assistant happened to register second.
+
+    `nom_appareil` is a name the user sets in the Watts app, so it tells them
+    which physical device an entity belongs to. "_2" never did.
+    """
+    ids = {state.entity_id for state in hass.states.async_all()}
+
+    # The named device carries its name.
+    assert any("verwarm_therm" in entity_id for entity_id in ids)
+    # The receiver does not: "nouvel appareil" is the factory default and names
+    # nothing, so it falls back to the zone label rather than putting French
+    # for "new device" in front of the user.
+    assert not any("nouvel_appareil" in entity_id for entity_id in ids)
+    assert "sensor.thermostat_woonkamer_air_temperature_woonkamer" in ids

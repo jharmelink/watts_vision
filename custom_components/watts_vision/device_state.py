@@ -97,16 +97,51 @@ def setpoint_limits(device) -> tuple[float | None, float | None]:
     )
 
 
-def iter_devices(smart_homes):
-    """Yield (smarthome_id, zone_label, device) for every device reported.
+def device_name(device) -> str | None:
+    """Return the name the API holds for a device, if it has a real one.
 
-    Devices sharing a zone are currently told apart only by Home Assistant
-    appending "_2" to whichever it registers second, which depends on the order
-    the API returns them in. Fixing that needs a name for the device, and
-    whether the API supplies one is unknown: nobody has yet looked at a raw
-    payload. The diagnostics added alongside this will answer it.
+    `nom_appareil` is a user-settable name. An unconfigured device carries the
+    factory default "nouvel appareil", French for "new device", which names
+    nothing and is not worth putting in front of a user.
+    """
+    for field in ("nom_appareil", "label_interface"):
+        name = (device or {}).get(field)
+        if name and str(name).strip().lower() != "nouvel appareil":
+            return str(name).strip()
+    return None
+
+
+def iter_devices(smart_homes):
+    """Yield (smarthome_id, label, device) for every device reported.
+
+    A zone is a control grouping rather than a location, and one can hold more
+    than one device -- a thermostat and a receiver, say. Without a
+    discriminator those are told apart only by Home Assistant appending "_2" to
+    whichever it registers second, which depends on the order the API returns
+    them in.
+
+    The device's own name is used where a zone holds several, and only there,
+    so a zone with one device keeps a clean name. A device with no real name
+    falls back to the zone label and lets Home Assistant disambiguate, which is
+    no worse than before.
     """
     for smart_home in smart_homes or []:
         for zone in smart_home.get("zones") or []:
-            for device in zone.get("devices") or []:
-                yield smart_home["smarthome_id"], zone.get("zone_label"), device
+            devices = zone.get("devices") or []
+            shared = len(devices) > 1
+            for device in devices:
+                label = zone.get("zone_label")
+                name = device_name(device) if shared else None
+                if name:
+                    label = f"{label} {name}"
+                yield smart_home["smarthome_id"], label, device
+
+
+def reports_heating_state(device) -> bool:
+    """Return whether a device says anything about calling for heat.
+
+    The receiver reports `heating_up` as null. Treating that as "not zero, so
+    it must be heating" made its sensor read on while the thermostat beside it
+    read off.
+    """
+    return bool(device) and device.get("heating_up") is not None

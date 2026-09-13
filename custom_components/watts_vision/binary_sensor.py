@@ -11,7 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import API_CLIENT, DOMAIN
-from .device_state import error_code, is_faulty, iter_devices
+from .device_state import error_code, is_faulty, iter_devices, reports_heating_state
 from .helpers import sub_device_info
 from .watts_api import WattsApi
 
@@ -80,8 +80,16 @@ class WattsVisionHeatingBinarySensor(WattsVisionBinarySensor):
         device = self.device
         # A device that is not reporting cannot be heating or not heating; it
         # is simply unknown, and saying "off" would be inventing an answer.
-        self._attr_available = device is not None and not is_faulty(device)
-        self._attr_is_on = bool(device) and device.get("heating_up") != "0"
+        # Nor can a device that never reports the field at all: a null here
+        # used to compare unequal to "0" and come out as on.
+        self._attr_available = (
+            device is not None
+            and not is_faulty(device)
+            and reports_heating_state(device)
+        )
+        self._attr_is_on = reports_heating_state(device) and (
+            device.get("heating_up") != "0"
+        )
 
 
 class WattsVisionProblemBinarySensor(WattsVisionBinarySensor):

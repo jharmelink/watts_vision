@@ -370,10 +370,29 @@ having to know it is a fault code, which it is not.
 confirms the decision to report a problem rather than a battery: the data to
 support a battery entity does not exist.
 
-**Device names exist**, which unblocks the entity naming deferred above.
-`nom_appareil` is likely a device type rather than a user-chosen name -- both
-fields read "Verwarm.Therm" here -- so whether it actually distinguishes two
-devices sharing a zone needs an export covering the receiver.
+**Device names exist and do distinguish devices.** A full export shows three
+distinct values: `"Verwarm.Therm"`, `"Verwarm."` and, on the receiver,
+`"nouvel appareil"` -- French for "new device", the factory default of a device
+nobody named. So `nom_appareil` is user-settable, and the two devices sharing
+the reference installation's woonkamer carry different names. The naming
+deferred above is implemented on that basis, with the factory default treated as
+no name at all rather than shown to a user.
+
+**A null is not a zero.** The receiver reports `heating_up` as null rather than
+`"0"`, and the comparison `heating_up != "0"` came out true, so its heating
+sensor read *on* while the thermostat beside it read *off*. This is the same
+lesson as the setpoints one file over, and it had been sitting in the project's
+own test output unremarked. Fields a device does not report are now checked for
+a usable value before being interpreted, not just compared.
+
+**Several more fields are ignored**, and are recorded here so nobody has to
+re-derive them: `programme` is 336 characters, being 48 half-hour slots across
+seven days, with digits `0` and `5` appearing -- and `5` is not a `gv_mode` this
+integration knows. `time_boost` varies per device, from 3540 to 7200, while the
+integration hardcodes 7200. `nv_mode` equals `gv_mode` on all nine devices,
+which settles an open question in `verify-operating-modes`. `bundle_id` is `2`
+on the receiver and `1` on every thermostat, so it may be a device-type
+discriminator worth more than a name.
 
 ## Risks / Trade-offs
 

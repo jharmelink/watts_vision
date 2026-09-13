@@ -21,7 +21,7 @@ from . import init_integration
 from .test_entities import ZONES
 
 PUSH = "custom_components.watts_vision.watts_api.WattsApi.pushTemperature"
-THERMOSTAT = "climate.thermostat_woonkamer"
+THERMOSTAT = "climate.thermostat_woonkamer_verwarm_therm"
 
 
 async def set_temperature(hass: HomeAssistant, celsius: float):

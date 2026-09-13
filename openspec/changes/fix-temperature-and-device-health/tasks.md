@@ -32,7 +32,8 @@ None of these block implementation, and none require contact with Watts. Each is
 - [x] 4.3 Make the `gv_mode` to preset lookup total so an unmapped mode cannot destroy a climate or sensor entity, leaving the existing mode mapping unchanged
 - [x] 4.4 Gate creation of climate and target-temperature entities on the device supplying *usable* setpoint and range values — treating present-but-null the same as absent, since the reference receiver reports `consigne_confort` and `min_set_point` as null
 - [x] 4.5 Derive the device registry model from API data instead of hardcoding `BT-D03-RF` in the entity platforms and `BT-CT02-RF` in `central_unit.py`, leaving it unset when unknown
-- [ ] 4.6 Distinguish entity names for devices sharing a zone using `nom_appareil`, now known to exist. Needs an export covering the receiver first: both name fields read "Verwarm.Therm" on the thermostat, so whether they actually differ between device types is unconfirmed. An opaque device-id fragment was tried and abandoned as no better than Home Assistant's `_2`
+- [x] 4.6 Devices sharing a zone are named by `nom_appareil`, confirmed to differ between devices in the same zone. The factory default "nouvel appareil" is treated as no name and falls back to the zone label. An opaque device-id fragment was tried first and abandoned as no better than Home Assistant's `_2`
+- [x] 4.8 Fixed a null read as a value: the receiver reports `heating_up` as null, and `heating_up != "0"` made its heating sensor report on. Found in a raw payload after sitting unremarked in the project's own test output
 - [x] 4.7 Verify every existing `unique_id` format is unchanged
 
 ## 5. Availability and battery
