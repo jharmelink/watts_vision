@@ -1,17 +1,21 @@
 ## 1. Fix the live break
 
-- [ ] 1.1 Delete the `self.config_entry = config_entry` assignment in `OptionsFlowHandler.__init__`, which raises `AttributeError` on current Home Assistant
-- [ ] 1.2 Confirm the options flow still reaches `self.config_entry` correctly through the base class
-- [ ] 1.3 Add a test that opens the options flow and submits changed credentials — the defect is invisible to any test that never opens it
+- [x] 1.1 Delete the `self.config_entry = config_entry` assignment in `OptionsFlowHandler.__init__`, which raises `AttributeError` on current Home Assistant
+- [x] 1.2 Confirm the options flow still reaches `self.config_entry` correctly through the base class
+- [x] 1.3 Add a test that opens the options flow and submits changed credentials — the defect is invisible to any test that never opens it
 - [ ] 1.4 Verify on the live installation that the integration's options can be opened and credentials changed
+- [x] 1.5 Cancel the refresh timer on unload. `async_track_time_interval` returns a cancel callback that `__init__.py` discards, and `async_unload_entry` never cancels it, so every reload leaves an orphaned 120-second poller running forever. Found by the new CI on its first run
+- [x] 1.6 Confirm the Home Assistant test harness's lingering-timer check passes, which is the regression test for 1.5
 
 ## 2. Make CI run the code
 
-- [ ] 2.1 Add a workflow that installs `requirements.test.txt` and runs pytest on every push and pull request
-- [ ] 2.2 Restore `tests/test_init.py`, which currently contains only commented-out code, as a real setup test
-- [ ] 2.3 Add a smoke test that sets up the config entry against a real `hass` instance with the Watts cloud mocked
-- [ ] 2.4 Replace the deprecated `--strict` pytest option in `setup.cfg` with `--strict-markers`
-- [ ] 2.5 Update the mypy `python_version` in `setup.cfg`, which declares 3.13 while the reference installation runs 3.14
+- [x] 2.1 Add a workflow that installs `requirements.test.txt` and runs pytest on every push and pull request
+- [x] 2.2 Restore `tests/test_init.py`, which currently contains only commented-out code, as a real setup test
+- [x] 2.3 Add a smoke test that sets up the config entry against a real `hass` instance with the Watts cloud mocked
+- [x] 2.4 Replace the deprecated `--strict` pytest option in `setup.cfg` with `--strict-markers`
+- [x] 2.7 Rewrite `tests/test_config_flow.py`: it used `data_entry_flow.RESULT_TYPE_FORM`, removed from Home Assistant, and depended on a network call failing to produce its expected result — neither viable in CI
+- [x] 2.6 Add `tests/conftest.py`; there was none, so custom-component tests could never have run, and add `asyncio_mode` to `setup.cfg` without which every async test errors before running
+- [ ] 2.5 Reconsider the mypy `python_version` in `setup.cfg`. The original premise was wrong: mypy should target the *minimum* supported Python, not whatever the reference installation happens to run, so 3.13 may already be correct
 
 ## 3. Catch drift automatically
 

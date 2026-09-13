@@ -37,7 +37,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def refresh_devices(event_time):
         await hass.async_add_executor_job(client.reloadDevices)
 
-    async_track_time_interval(hass, refresh_devices, SCAN_INTERVAL)
+    # Registering the cancel callback with the entry is what stops the timer on
+    # unload. Without it every reload left another poller running for the life
+    # of the process, each one polling the Watts cloud independently.
+    entry.async_on_unload(
+        async_track_time_interval(hass, refresh_devices, SCAN_INTERVAL)
+    )
 
     return True
 

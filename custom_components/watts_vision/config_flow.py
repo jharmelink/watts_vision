@@ -81,7 +81,7 @@ class ConfigFlow(ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry):
         """Get the options flow for this handler."""
-        return OptionsFlowHandler(config_entry)
+        return OptionsFlowHandler()
 
 
 class InvalidAuth(HomeAssistantError):
@@ -95,9 +95,9 @@ class UsernameExists(HomeAssistantError):
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options flow for the Watts Vision integration."""
 
-    def __init__(self, config_entry):
-        """Initialize the options flow."""
-        self.config_entry = config_entry
+    # `config_entry` is supplied by the base class as a read-only property.
+    # Assigning it here raised AttributeError and made the options flow
+    # unopenable.
 
     async def async_step_init(self, user_input=None):
         errors = {}

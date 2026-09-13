@@ -1,0 +1,25 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "actions/checkout@v4"
+      - uses: "actions/setup-python@v5"
+        with:
+          python-version: "3.13"
+      - name: "Install test dependencies"
+        # Home Assistant comes from pytest-homeassistant-custom-component and is
+        # deliberately not pinned. This integration targets a platform it does not
+        # control, so being told early that something moved is the point.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.test.txt
+      - name: "Show resolved Home Assistant version"
+        run: pip show homeassistant | head -n 2
+      - name: "Run tests"
+        run: pytest
