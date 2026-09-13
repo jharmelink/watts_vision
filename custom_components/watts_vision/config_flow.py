@@ -5,7 +5,7 @@ import logging
 from typing import Any
 
 from homeassistant import config_entries
-from homeassistant.config_entries import CONN_CLASS_CLOUD_POLL, ConfigFlow
+from homeassistant.config_entries import ConfigFlow
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
@@ -46,11 +46,10 @@ async def validate_input(
     return data
 
 
-class ConfigFlow(ConfigFlow, domain=DOMAIN):
+class WattsVisionConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Watts Vision."""
 
     VERSION = 1
-    CONNECTION_CLASS = CONN_CLASS_CLOUD_POLL
 
     async def async_step_user(self, user_input: dict[str, Any] = None):
         if user_input is None:
@@ -132,7 +131,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 errors["base"] = "unknown"
             else:
                 # If updated, return to overview
-                return self.async_create_entry(title="", data=None)
+                return self.async_create_entry(title="", data={})
 
         return self.async_show_form(
             step_id="init",

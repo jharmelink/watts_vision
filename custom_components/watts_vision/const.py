@@ -8,6 +8,8 @@ from homeassistant.components.climate.const import (
 
 API_CLIENT = "api"
 
+CENTRAL_UNIT_IDS = "central_unit_ids"
+
 DOMAIN = "watts_vision"
 
 PRESET_DEFROST = "Frost Protection"

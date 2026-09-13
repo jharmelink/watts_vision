@@ -15,6 +15,7 @@ from numpy import nan as NaN
 
 from .central_unit import WattsVisionLastCommunicationSensor
 from .const import API_CLIENT, DOMAIN, ERROR_MAP, PRESET_MODE_MAP
+from .helpers import sub_device_info
 from .watts_api import WattsApi
 
 _LOGGER = logging.getLogger(__name__)
@@ -120,16 +121,9 @@ class WattsVisionThermostatSensor(SensorEntity):
 
     @property
     def device_info(self):
-        return {
-            "identifiers": {
-                # Serial numbers are unique identifiers within a specific domain
-                (DOMAIN, self.id)
-            },
-            "manufacturer": "Watts",
-            "name": "Thermostat " + self.zone,
-            "model": "BT-D03-RF",
-            "via_device": (DOMAIN, self.smartHome),
-        }
+        return sub_device_info(
+            self.hass, self.smartHome, self.id, "Thermostat " + self.zone
+        )
 
     async def async_update(self):
         smartHomeDevice = self.client.getDevice(self.smartHome, self.id)
@@ -178,17 +172,13 @@ class WattsVisionTemperatureSensor(SensorEntity):
 
     @property
     def device_info(self):
-        return {
-            "identifiers": {
-                # Serial numbers are unique identifiers within a specific domain
-                (DOMAIN, self.id)
-            },
-            "manufacturer": "Watts",
-            "name": "Thermostat " + self.zone,
-            "model": "BT-D03-RF",
-            "via_device": (DOMAIN, self.smartHome),
-            "suggested_area": self.zone
-        }
+        return sub_device_info(
+            self.hass,
+            self.smartHome,
+            self.id,
+            "Thermostat " + self.zone,
+            suggested_area=self.zone,
+        )
 
     async def async_update(self):
         smartHomeDevice = self.client.getDevice(self.smartHome, self.id)
@@ -244,16 +234,9 @@ class WattsVisionSetTemperatureSensor(SensorEntity):
 
     @property
     def device_info(self):
-        return {
-            "identifiers": {
-                # Serial numbers are unique identifiers within a specific domain
-                (DOMAIN, self.id)
-            },
-            "manufacturer": "Watts",
-            "name": "Thermostat " + self.zone,
-            "model": "BT-D03-RF",
-            "via_device": (DOMAIN, self.smartHome),
-        }
+        return sub_device_info(
+            self.hass, self.smartHome, self.id, "Thermostat " + self.zone
+        )
 
     async def async_update(self):
         smartHomeDevice = self.client.getDevice(self.smartHome, self.id)
@@ -323,16 +306,9 @@ class WattsVisionErrorSensor(SensorEntity):
 
     @property
     def device_info(self):
-        return {
-            "identifiers": {
-                # Serial numbers are unique identifiers within a specific domain
-                (DOMAIN, self.id)
-            },
-            "manufacturer": "Watts",
-            "name": "Thermostat " + self.zone,
-            "model": "BT-D03-RF",
-            "via_device": (DOMAIN, self.smartHome)
-        }
+        return sub_device_info(
+            self.hass, self.smartHome, self.id, "Thermostat " + self.zone
+        )
     
     async def async_update(self):
         smartHomeDevice = self.client.getDevice(self.smartHome, self.id)

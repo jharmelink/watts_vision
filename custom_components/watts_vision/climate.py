@@ -24,6 +24,7 @@ from .const import (
     PRESET_PROGRAM_OFF,
     PRESET_PROGRAM_ON,
 )
+from .helpers import sub_device_info
 from .watts_api import WattsApi
 
 _LOGGER = logging.getLogger(__name__)
@@ -120,16 +121,9 @@ class WattsThermostat(ClimateEntity):
 
     @property
     def device_info(self):
-        return {
-            "identifiers": {
-                # Serial numbers are unique identifiers within a specific domain
-                (DOMAIN, self.id)
-            },
-            "manufacturer": "Watts",
-            "name": "Thermostat " + self.zone,
-            "model": "BT-D03-RF",
-            "via_device": (DOMAIN, self.smartHome),
-        }
+        return sub_device_info(
+            self.hass, self.smartHome, self.id, "Thermostat " + self.zone
+        )
 
     async def async_update(self):
         smartHomeDevice = self.client.getDevice(self.smartHome, self.id)

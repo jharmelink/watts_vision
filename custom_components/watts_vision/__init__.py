@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.event import async_track_time_interval
 
 from .const import API_CLIENT, DOMAIN, SCAN_INTERVAL
+from .helpers import register_central_units
 from .watts_api import WattsApi
 
 _LOGGER = logging.getLogger(__name__)
@@ -31,6 +32,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.async_add_executor_job(client.loadData)
 
     hass.data[DOMAIN][API_CLIENT] = client
+
+    # Must happen before the platforms are set up: sub-devices reference the
+    # central unit by registry id, which only exists once it is registered.
+    register_central_units(hass, entry, client.getSmartHomes())
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

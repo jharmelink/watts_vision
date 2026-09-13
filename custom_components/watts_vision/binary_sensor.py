@@ -7,6 +7,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import API_CLIENT, DOMAIN
+from .helpers import sub_device_info
 from .watts_api import WattsApi
 
 _LOGGER = logging.getLogger(__name__)
@@ -72,16 +73,9 @@ class WattsVisionHeatingBinarySensor(BinarySensorEntity):
 
     @property
     def device_info(self):
-        return {
-            "identifiers": {
-                # Serial numbers are unique identifiers within a specific domain
-                (DOMAIN, self.id)
-            },
-            "manufacturer": "Watts",
-            "name": "Thermostat " + self.zone,
-            "model": "BT-D03-RF",
-            "via_device": (DOMAIN, self.smartHome),
-        }
+        return sub_device_info(
+            self.hass, self.smartHome, self.id, "Thermostat " + self.zone
+        )
 
     async def async_update(self):
         # try:
