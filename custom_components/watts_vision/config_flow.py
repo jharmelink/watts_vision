@@ -12,11 +12,14 @@ from homeassistant.exceptions import HomeAssistantError
 import voluptuous as vol
 
 from .const import DOMAIN
+from .exceptions import WattsVisionAuthError, WattsVisionConnectionError
 from .watts_api import WattsApi
 
 CONFIG_SCHEMA = vol.Schema(
     {vol.Required(CONF_USERNAME): str, vol.Required(CONF_PASSWORD): str}
 )
+
+REAUTH_SCHEMA = vol.Schema({vol.Required(CONF_PASSWORD): str})
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,7 +27,12 @@ _LOGGER = logging.getLogger(__name__)
 async def validate_input(
     hass: HomeAssistant, data: dict[str, Any], current: dict[str, Any] = None
 ) -> dict[str, Any]:
-    """Validate the user input allows us to connect."""
+    """Validate the user input allows us to connect.
+
+    Authenticates through `getLoginToken` rather than `test_authentication`, so
+    that a wrong password and an unreachable cloud arrive as different
+    exceptions and can be reported to the user as different things.
+    """
 
     # Check if the username already exists as an entry
     existing_entries = hass.config_entries.async_entries(DOMAIN)
@@ -35,15 +43,21 @@ async def validate_input(
             raise UsernameExists
 
     api = WattsApi(hass, data[CONF_USERNAME], data[CONF_PASSWORD])
-
-    authenticated = await hass.async_add_executor_job(api.test_authentication)
-
-    # If authentication fails, raise an exception.
-    if not authenticated:
-        raise InvalidAuth
+    await hass.async_add_executor_job(api.getLoginToken, True)
 
     # Return info that you want to store in the config entry.
     return data
+
+
+def _error_for(exception: Exception) -> str:
+    """Map an exception onto the error key shown on the form."""
+    if isinstance(exception, WattsVisionAuthError):
+        return "invalid_auth"
+    if isinstance(exception, WattsVisionConnectionError):
+        return "cannot_connect"
+    if isinstance(exception, UsernameExists):
+        return "username_exists"
+    return "unknown"
 
 
 class WattsVisionConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -60,13 +74,10 @@ class WattsVisionConfigFlow(ConfigFlow, domain=DOMAIN):
         try:
             _LOGGER.debug("Validate input")
             await validate_input(self.hass, user_input)
-        except InvalidAuth:
-            errors["base"] = "invalid_auth"
-        except UsernameExists:
-            errors["base"] = "username_exists"
-        except Exception:  # pylint: disable=broad-except
-            _LOGGER.exception("Unexpected exception")
-            errors["base"] = "unknown"
+        except Exception as exception:  # pylint: disable=broad-except
+            errors["base"] = _error_for(exception)
+            if errors["base"] == "unknown":
+                _LOGGER.exception("Unexpected exception")
         else:
             return self.async_create_entry(
                 title=str(user_input["username"]), data=user_input
@@ -76,15 +87,38 @@ class WattsVisionConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=CONFIG_SCHEMA, errors=errors
         )
 
+    async def async_step_reauth(self, entry_data: dict[str, Any]):
+        """Start reauthentication after the cloud rejected stored credentials."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(self, user_input: dict[str, Any] = None):
+        """Ask for a new password for the account already configured."""
+        entry = self._get_reauth_entry()
+        errors = {}
+
+        if user_input is not None:
+            data = {**entry.data, **user_input}
+            try:
+                await validate_input(self.hass, data, entry.data)
+            except Exception as exception:  # pylint: disable=broad-except
+                errors["base"] = _error_for(exception)
+                if errors["base"] == "unknown":
+                    _LOGGER.exception("Unexpected exception")
+            else:
+                return self.async_update_reload_and_abort(entry, data_updates=data)
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=REAUTH_SCHEMA,
+            description_placeholders={CONF_USERNAME: entry.data[CONF_USERNAME]},
+            errors=errors,
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
         """Get the options flow for this handler."""
         return OptionsFlowHandler()
-
-
-class InvalidAuth(HomeAssistantError):
-    """Error to indicate there is invalid auth."""
 
 
 class UsernameExists(HomeAssistantError):
@@ -100,7 +134,6 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input=None):
         errors = {}
-        updated = None
         if user_input is not None:
             try:
                 _LOGGER.debug("Validate input")
@@ -122,13 +155,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                         self.config_entry.entry_id
                     )
 
-            except InvalidAuth:
-                errors["base"] = "invalid_auth"
-            except UsernameExists:
-                errors["base"] = "username_exists"
-            except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Unexpected exception")
-                errors["base"] = "unknown"
+            except Exception as exception:  # pylint: disable=broad-except
+                errors["base"] = _error_for(exception)
+                if errors["base"] == "unknown":
+                    _LOGGER.exception("Unexpected exception")
             else:
                 # If updated, return to overview
                 return self.async_create_entry(title="", data={})

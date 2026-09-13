@@ -10,6 +10,8 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
+from custom_components.watts_vision.exceptions import WattsVisionAuthError
+
 from . import init_integration
 
 NEW_CREDENTIALS = {
@@ -35,9 +37,6 @@ async def test_options_flow_updates_credentials(hass: HomeAssistant):
     result = await hass.config_entries.options.async_init(entry.entry_id)
 
     with patch(
-        "custom_components.watts_vision.watts_api.WattsApi.test_authentication",
-        return_value=True,
-    ), patch(
         "custom_components.watts_vision.watts_api.WattsApi.getLoginToken",
         return_value="a-token",
     ), patch(
@@ -60,8 +59,8 @@ async def test_options_flow_rejects_invalid_credentials(hass: HomeAssistant):
     result = await hass.config_entries.options.async_init(entry.entry_id)
 
     with patch(
-        "custom_components.watts_vision.watts_api.WattsApi.test_authentication",
-        return_value=False,
+        "custom_components.watts_vision.watts_api.WattsApi.getLoginToken",
+        side_effect=WattsVisionAuthError("nope"),
     ):
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], user_input=NEW_CREDENTIALS

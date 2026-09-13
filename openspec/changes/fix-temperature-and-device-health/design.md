@@ -104,6 +104,19 @@ The secondary benefit is that rounding then happens in exactly one place instead
   └─────────────────────────────────────────────────────────────┘
 ```
 
+### A failed refresh keeps the cache; availability carries the signal
+
+Agreed with `api-resilience`, which approaches the same question from the
+client side.
+
+**Chosen:** a refresh that fails leaves the cached device data as it was, and
+the affected entities report unavailable. Clearing the cache would empty every
+entity during a brief outage and lose the last known state for no gain.
+
+The division of labour is that the client raises rather than reporting success,
+so nothing can mistake stale data for a completed refresh, and this change
+decides what the user sees.
+
 ### Drive availability from device state, not from the sentinel value
 
 The dead-battery reading converts to roughly 100.2 °C, which corresponds to a raw value near `2124`. Matching that number exactly would be brittle: we do not know it precisely, we do not know whether it varies by firmware or device type, and it would silently stop working if it changed.

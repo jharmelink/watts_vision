@@ -89,6 +89,23 @@ Entity updates and the refresh timer both reach the client through executor thre
 
 **Chosen:** a `threading.Lock` around acquisition, with a re-check inside the lock so that threads queued behind the winner use the token it obtained rather than requesting another. A `threading` primitive rather than an asyncio one, because the client runs in executor threads and knows nothing about the event loop.
 
+### A failed refresh keeps the cache; availability carries the signal
+
+Agreed with `fix-temperature-and-device-health`, which approaches the same
+question from the entity side.
+
+**Chosen:** a refresh that fails leaves the cached device data exactly as it
+was, and says so by making the affected entities unavailable. Clearing the
+cache would empty every entity during a brief outage and lose the last known
+state for no gain, while silently keeping it and reporting it as current is the
+behaviour this change exists to end.
+
+The client's part is to raise rather than report success, so a caller can never
+mistake stale data for a completed refresh. Deciding what a user sees is the
+entity layer's part. This change implements the client half and the minimum
+entity handling needed to stop an exception escaping an update; the fuller
+availability rules belong to the other change.
+
 ### Keep the client synchronous
 
 Making the client async would remove the executor hop and make the locking simpler. It would also touch every call site and every entity, and it is a prerequisite for nothing in this change.
@@ -122,5 +139,4 @@ Rollback is per-step. Nothing here touches stored configuration or the config en
 
 - **What timeout value?** Needs observed response times from the live installation. A first guess of 30 seconds is comfortably above a normal response and well below the 120-second poll interval, but it is a guess.
 - **Does the cloud rate-limit or lock accounts after repeated failed logins?** Unknowable without testing against a real account, which risks the user's own account. Argues for conservative retry behaviour by default.
-- **Is `code` `8` a success response?** The Homey app treats both `'1'` and `'8'` as success, while this integration accepts only a `key` containing `OK`. If `8` is legitimate, valid responses may currently be discarded. Cheap to settle once diagnostics from the other change are available.
-- **Should a failed refresh clear the cached data or leave it?** Leaving it means entities can report stale values; clearing it means a brief outage empties everything. The entity-side answer in `fix-temperature-and-device-health` is to go `unavailable`, which suggests leaving the cache alone and letting availability carry the signal — but the two changes should agree explicitly rather than by accident.
+- **Is `code` `8` a success response?** Unresolved, and deliberately not guessed. The Homey app treats both `'1'` and `'8'` as success while this integration accepts only a `key` containing `OK`; the two read different fields, so neither corroborates the other. The existing check is kept because it is known to work, and the raised error now carries the raw `code`, `key` and `value`, which turns a silent rejection into something a user can report. Settle it if a report ever shows a discarded `8`.

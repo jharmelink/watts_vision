@@ -5,9 +5,11 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.event import async_track_time_interval
 
 from .const import API_CLIENT, DOMAIN, SCAN_INTERVAL
+from .exceptions import WattsVisionAuthError, WattsVisionError
 from .helpers import register_central_units
 from .watts_api import WattsApi
 
@@ -25,11 +27,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         await hass.async_add_executor_job(client.getLoginToken)
-    except Exception as exception:  # pylint: disable=broad-except
-        _LOGGER.exception(exception)
-        return False
-
-    await hass.async_add_executor_job(client.loadData)
+        await hass.async_add_executor_job(client.loadData)
+    except WattsVisionAuthError as err:
+        # Prompts the user to re-enter credentials rather than retrying wrong
+        # ones forever, which also risks locking the account.
+        raise ConfigEntryAuthFailed(str(err)) from err
+    except WattsVisionError as err:
+        # Unreachable or misbehaving cloud: Home Assistant will retry.
+        raise ConfigEntryNotReady(str(err)) from err
 
     hass.data[DOMAIN][API_CLIENT] = client
 
@@ -40,7 +45,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     async def refresh_devices(event_time):
-        await hass.async_add_executor_job(client.reloadDevices)
+        try:
+            await hass.async_add_executor_job(client.reloadDevices)
+        except WattsVisionError as err:
+            # The cached data stays as it was; entity availability is where a
+            # stale reading is meant to be surfaced.
+            _LOGGER.warning("Refreshing Watts Vision devices failed: %s", err)
 
     # Registering the cancel callback with the entry is what stops the timer on
     # unload. Without it every reload left another poller running for the life

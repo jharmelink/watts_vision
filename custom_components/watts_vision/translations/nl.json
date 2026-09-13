@@ -4,7 +4,8 @@
     "error": {
       "invalid_auth": "E-mail en/of wachtwoord ongeldig.",
       "unknown": "Er is een onverwachte uitzondering opgetreden.",
-      "username_exists": "Een account met het opgegeven e-mailadres is al toegevoegd."
+      "username_exists": "Een account met het opgegeven e-mailadres is al toegevoegd.",
+      "cannot_connect": "Kan de Watts Vision cloud niet bereiken. Controleer je internetverbinding en probeer het opnieuw."
     },
     "step": {
       "user": {
@@ -13,6 +14,13 @@
           "password": "Password"
         },
         "description": "Verbinding maken met de Watts Visie API"
+      },
+      "reauth_confirm": {
+        "data": {
+          "password": "Wachtwoord"
+        },
+        "title": "Watts Vision - Herauthenticatie",
+        "description": "De Watts Vision cloud heeft de opgeslagen inloggegevens voor {username} geweigerd. Voer het wachtwoord opnieuw in."
       }
     }
   },
@@ -20,7 +28,8 @@
     "error": {
       "invalid_auth": "E-mail en/of wachtwoord ongeldig.",
       "unknown": "Er is een onverwachte uitzondering opgetreden.",
-      "username_exists": "Een account met het opgegeven e-mailadres is al toegevoegd."
+      "username_exists": "Een account met het opgegeven e-mailadres is al toegevoegd.",
+      "cannot_connect": "Kan de Watts Vision cloud niet bereiken. Controleer je internetverbinding en probeer het opnieuw."
     },
     "step": {
       "init": {

@@ -4,7 +4,8 @@
     "error": {
       "invalid_auth": "Email and/or password invalid.",
       "unknown": "Unexpected exception occurred.",
-      "username_exists": "An account with the provided email is already being tracked."
+      "username_exists": "An account with the provided email is already being tracked.",
+      "cannot_connect": "Could not reach the Watts Vision cloud. Check your internet connection and try again."
     },
     "step": {
       "user": {
@@ -13,6 +14,13 @@
           "password": "Password"
         },
         "description": "Connect to the Watts Vision API"
+      },
+      "reauth_confirm": {
+        "data": {
+          "password": "Password"
+        },
+        "title": "Watts Vision - Reauthentication",
+        "description": "The Watts Vision cloud rejected the stored credentials for {username}. Enter the password again."
       }
     }
   },
@@ -20,7 +28,8 @@
     "error": {
       "invalid_auth": "Email and/or password invalid.",
       "unknown": "Unexpected exception occurred.",
-      "username_exists": "An account with the provided email is already being tracked."
+      "username_exists": "An account with the provided email is already being tracked.",
+      "cannot_connect": "Could not reach the Watts Vision cloud. Check your internet connection and try again."
     },
     "step": {
       "init": {
