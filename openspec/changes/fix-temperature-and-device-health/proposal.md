@@ -1,6 +1,6 @@
 ## Why
 
-The integration silently produces wrong data instead of reporting that something is wrong. On a live 9-device installation we confirmed three failures happening right now: a dead thermostat battery is recorded as a **100.2 °C room temperature** in long-term statistics; the battery-alarm sensor that should have caught it **does not exist** for exactly the two devices whose batteries are dead; and a ninth device is missing its climate entity entirely. None of this surfaces to the user — no `unavailable` state, no repair issue, no log they would ever look at.
+The integration silently produces wrong data instead of reporting that something is wrong. On a live 9-device installation we confirmed three failures happening right now: a dead thermostat battery is recorded as a **100.2 °C room temperature** in long-term statistics, which are confirmed to be recording on the reference installation; the battery-alarm sensor that should have caught it **does not exist** for exactly the two devices whose batteries are dead; and a ninth device is missing its climate entity entirely. None of this surfaces to the user — no `unavailable` state, no repair issue, no log they would ever look at.
 
 Separately, setpoints drift off the device's own 0.5 °C grid because the write path truncates instead of rounding, which is the "small temperature deviation" that two previous commits (`58f9f60`, `df8486e`) tried and failed to fix — and the second of those introduced a rounding regression that is still in `main`.
 
@@ -11,7 +11,7 @@ Separately, setpoints drift off the device's own 0.5 °C grid because the write 
 - Round instead of truncate when writing setpoints. `climate.py` uses `str(int(temp * 10))`; `int(591.8)` stores `591`, so a 15.1 °C request becomes a 15.06 °C setpoint. Confirmed on two live devices (`59.1 °F`, `69.9 °F`).
 - Stop offering a setpoint resolution finer than the device stores. The entity currently accepts 0.1 °C input it has no way to hold. The device grid appears to be 0.5 °C, but a third-party implementation of the same API uses 0.1 °C, so the step is declared only once confirmed empirically.
 - Revert the rounding regression in `WattsVisionSetTemperatureSensor`. `round(x * 2, 1) / 2` yields 0.05 °C resolution (19.55, 19.65), not the half-degree snap it was meant to be. It also makes the target sensor disagree with the air-temperature sensor beside it.
-- **BREAKING (statistics):** stop overriding `SensorEntity.state` and report through `native_value` instead. The override bypasses Home Assistant's own unit conversion, which is why each sensor hand-rolls a duplicate F→C conversion while declaring its native unit as °F. It also means `state_class = MEASUREMENT` is declared but nothing reaches the recorder's long-term statistics. Existing statistics for these entities may need to be reset.
+- Stop overriding `SensorEntity.state` and report through `native_value` instead. The override bypasses Home Assistant's own unit conversion, which is why each sensor hand-rolls a duplicate F→C conversion while declaring `native_unit_of_measurement` as °F for a value that is in °C. Long-term statistics are confirmed to be recording today — Home Assistant compiles them from recorded states, not from `native_value`, so the override never blocked them — and the reported unit does not change, so the series stays continuous. This is a correctness and maintainability fix, not a repair of something broken.
 
 **Device health and availability**
 
@@ -63,7 +63,7 @@ None. `openspec/specs/` is empty; this is the first change in the project.
 
 **User-visible**
 
-- Long-term statistics for temperature sensors begin recording; existing series may need a reset, and historical `100.2 °C` readings remain until purged (out of scope here).
+- Long-term statistics keep recording as they do today, with the same values and the same unit. What changes is that `100.2 °C` and `nan` stop entering them. Readings already recorded remain until purged, which is out of scope here.
 - Devices with dead batteries become `unavailable` instead of reporting a temperature, so automations reading them must tolerate an unavailable state.
 - Setpoints step at the device's real resolution instead of accepting input the device cannot hold, once that resolution is confirmed.
 - One additional climate entity and two additional error entities appear on the test installation.

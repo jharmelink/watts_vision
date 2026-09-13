@@ -5,8 +5,8 @@ None of these block implementation, and none require contact with Watts. Each is
 - [x] 1.1a Mechanism confirmed from logs: `sensor.py:339` raises for exactly the two dead-battery devices, accounting for both missing error entities
 - [x] 1.1b Value confirmed: `KeyError: 12288` (0x3000, bits 12 and 13) on both dead-battery devices; `error_code` is an int bitfield, not an enumeration
 - [ ] 1.2 Confirm the second woonkamer device is a BT-WR02-RF receiver (owner's tentative identification, recorded in design.md) and whether its 12.0 °C is a real ambient reading
-- [ ] 1.3 Check Developer Tools → Statistics for the Watts temperature sensors and record whether long-term statistics currently exist
-- [ ] 1.4 Settle the 0.5 °C grid empirically: write an off-grid value to an *active* setpoint, wait for the device to apply it, and record whether the value that comes back has snapped
+- [x] 1.3 Statistics confirmed present and recording on the reference installation; the `state` override never blocked the recorder, so the `100.2 °C` readings are genuine recorded history
+- [x] 1.4 Settled on hardware: writing `690` to an active comfort setpoint reads back unchanged, so the device stores 0.1 °F and does NOT snap to 0.5 °C. No `target_temperature_step` of 0.5 is justified
 
 ## 2. Conversion boundary
 
@@ -18,7 +18,7 @@ None of these block implementation, and none require contact with Watts. Each is
 ## 3. Temperature correctness
 
 - [ ] 3.1 Route `climate.py` reads and writes through the conversion helpers and drop the inline `/ 10` and `* 10` arithmetic
-- [ ] 3.2 Change the climate entity's `temperature_unit` to Celsius, and declare `target_temperature_step` of 0.5 °C only if task 1.4 confirms the device snaps
+- [ ] 3.2 Change the climate entity's `temperature_unit` to Celsius and declare `target_temperature_step` of 0.1 °C as a documented usability choice, not as the device's resolution; a 0.5 °C step is disproven by task 1.4
 - [ ] 3.3 Remove the `state` property overrides from all sensor entities and expose readings via `native_value` with a Celsius `native_unit_of_measurement`
 - [ ] 3.4 Delete the hand-rolled F→C conversions and the `hass.config.units` branches from `sensor.py`, including the `round(x * 2, 1) / 2` regression
 - [ ] 3.5 Report the target temperature as `None` when the device has no active setpoint, and remove the `NaN` sentinel and the `numpy` import
@@ -28,7 +28,7 @@ None of these block implementation, and none require contact with Watts. Each is
 ## 4. Total lookups and feature detection
 
 - [ ] 4.1 Make device health structural — zero is healthy, nonzero is a fault — so no error code can raise regardless of how many bits are set, and expose the raw value for unrecognised ones
-- [ ] 4.2 Replace `ERROR_MAP` with bitfield-safe handling; label `12288` as observed-with-dead-battery with its provenance, and discard the third-party discrete-code labels, which assume a shape the data does not have
+- [ ] 4.2 Replace `ERROR_MAP` with bitfield-safe handling; label `12288` as "device has stopped reporting" — it is observed on both a flat-battery device and a broken one, so it is not battery-specific — and discard the third-party discrete-code labels, which assume a shape the data does not have
 - [ ] 4.3 Make the `gv_mode` to preset lookup total so an unmapped mode cannot destroy a climate or sensor entity, leaving the existing mode mapping unchanged
 - [ ] 4.4 Gate creation of climate and target-temperature entities on the device supplying *usable* setpoint and range values — treating present-but-null the same as absent, since the reference receiver reports `consigne_confort` and `min_set_point` as null
 - [ ] 4.5 Derive the device registry model from API data instead of hardcoding `BT-D03-RF` in the entity platforms and `BT-CT02-RF` in `central_unit.py`, leaving it unset when unknown
@@ -40,7 +40,8 @@ None of these block implementation, and none require contact with Watts. Each is
 - [ ] 5.1 Implement the `available` property across all entity classes, replacing the unused `_available` flags
 - [ ] 5.2 Derive measurement-entity availability from `error_code`, keeping setpoint entities available when their cached setpoints remain valid
 - [ ] 5.3 Add a temperature plausibility bound as a backstop so unseen sentinels are suppressed without enumerating them
-- [ ] 5.4 Add a battery entity per device using `BinarySensorDeviceClass.BATTERY`
+- [ ] 5.4 Add a fault entity per device using `BinarySensorDeviceClass.PROBLEM`, carrying the raw error code; do not present it as a battery condition
+- [ ] 5.5a Check the raw payload for a battery field the integration ignores, and test the bit-0 hypothesis: find a thermostat currently showing a low-battery warning on its own screen and read its `error_code`. Bit 0 set confirms a battery signal reaches the API; `0` proves it does not. Either way a genuine battery entity is proposed separately, not added here
 - [ ] 5.5 Report entities as unavailable when a periodic refresh fails and no device data is available
 
 ## 6. Diagnostics
@@ -56,10 +57,10 @@ None of these block implementation, and none require contact with Watts. Each is
 
 - [ ] 7.1 Confirm `sensor.error_studio` and `sensor.error_logeer_kamer` now exist
 - [ ] 7.2 Confirm the second woonkamer device keeps its four working entities, and that its climate and target-temperature entities are deliberately and visibly absent rather than crashing
-- [ ] 7.3 Confirm the two dead-battery devices report unavailable instead of 100.2 °C, and that their battery entities show low
-- [ ] 7.4 Confirm the climate entity and the target temperature sensor report identical values for the same device, at 0.5 °C resolution
+- [ ] 7.3 Confirm the two faulty devices report unavailable instead of 100.2 °C, and that their problem entities show a fault
+- [ ] 7.4 Confirm the climate entity and the target temperature sensor report identical values for the same device, and that 20.6 °C is selectable from the thermostat card and reads back as 20.6
 - [ ] 7.5 Set a thermostat to 20.5 °C, wait for a refresh, and confirm `consigne_confort` reads back as exactly `689`
-- [ ] 7.6 Confirm temperature sensors appear in Developer Tools → Statistics and are recording
+- [ ] 7.6 Confirm temperature sensors still record to statistics after the change, with the series continuous across the unit change and no gap introduced
 - [ ] 7.7 Download diagnostics and inspect the output by eye for any unredacted credential, token or identifier before it is ever shared
 
 ## 8. Release

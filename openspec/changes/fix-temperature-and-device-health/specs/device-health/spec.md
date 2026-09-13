@@ -47,26 +47,29 @@ The field is a bitfield rather than an enumeration — observed values include `
 - **THEN** the device is treated as healthy
 - **AND** its measurement entities remain available
 
-### Requirement: Battery state is exposed as a battery entity
+### Requirement: Device faults are exposed as a problem entity
 
-The integration SHALL expose each battery-powered device's battery condition using the Home Assistant battery device class, so that standard low-battery handling in the user interface and in automations applies.
+The integration SHALL expose each device's fault condition using the Home Assistant problem device class, so that a faulty device is visible in the interface and usable in automations.
 
-#### Scenario: A healthy device reports a good battery
+It MUST NOT present the fault as a battery condition. The error code observed on faulty devices does not distinguish a flat battery from failed hardware, and telling a user their battery is low when their thermostat has broken sends them to fix the wrong thing.
+
+#### Scenario: A healthy device reports no problem
 
 - **WHEN** a device reports no fault
-- **THEN** its battery entity reports a normal state
+- **THEN** its problem entity reports a normal state
 
-#### Scenario: A failed battery is surfaced
+#### Scenario: A faulty device is surfaced
 
-- **WHEN** a device reports an error code observed to accompany battery failure
-- **THEN** its battery entity reports a low or failed battery state
+- **WHEN** a device reports a nonzero error code
+- **THEN** its problem entity reports a problem
 - **AND** the condition is visible without the user inspecting logs
+- **AND** the raw code is available for diagnosis
 
-#### Scenario: A battery claim rests on observation, not on a decoded bit
+#### Scenario: No battery claim is made without a battery signal
 
-- **WHEN** the integration reports a battery fault
-- **THEN** that conclusion derives from an error code value observed to accompany a real dead battery
-- **AND** not from assigning a meaning to an individual bit that no observation has isolated
+- **WHEN** the integration detects that a device is faulty
+- **THEN** it does not report this as a battery condition
+- **AND** it makes no claim about the cause that the data does not support
 
 ### Requirement: A device that cannot report goes unavailable
 

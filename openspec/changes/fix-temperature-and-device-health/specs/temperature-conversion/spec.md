@@ -34,23 +34,28 @@ When converting a requested temperature into the integer deci-Fahrenheit value s
 - **WHEN** a setpoint of 20.5 °C is requested
 - **THEN** the integration sends `689`
 
-### Requirement: Setpoints are constrained to the device grid
+### Requirement: Offered resolution does not misrepresent the device
 
-The integration MUST NOT offer a setpoint resolution finer than the device actually stores. Where the device's resolution is known, the climate entity SHALL declare a matching `target_temperature_step`.
+The integration MUST NOT declare a `target_temperature_step` that implies a precision the device does not have, and MUST NOT declare one so coarse that a user cannot reach a value the device can hold. Where a step is offered for usability, it SHALL be documented as a convenience rather than as the device's resolution.
 
-The device's resolution is believed to be 0.5 °C, on the evidence that every setpoint in the reference installation not affected by the truncation defect lands on an exact half-degree. This is not yet confirmed — a third-party implementation of the same API uses 0.1 °C — so the specific step value is subject to the empirical check in the tasks. The requirement is the constraint, not the number.
+The device stores setpoints in tenths of a degree Fahrenheit, confirmed by writing an off-grid value to an active setpoint on hardware and reading it back unchanged. No exact Celsius step exists, so the step offered is a usability choice: 0.1 °C, which keeps every value a user is likely to want reachable from the thermostat card.
 
-#### Scenario: The user interface offers only representable values
+#### Scenario: A requested value is stored as the nearest the device can hold
 
-- **WHEN** a user adjusts the target temperature on the thermostat card
-- **THEN** the offered values step by the device's actual resolution
-- **AND** a value the device cannot store cannot be selected
+- **WHEN** a user requests a target temperature that is not exactly representable
+- **THEN** the nearest value the device can store is written
+- **AND** the value reported back is the one actually stored, not the one requested
 
-#### Scenario: An unconfirmed resolution is not asserted
+#### Scenario: No false precision is claimed
 
-- **WHEN** the device's setpoint resolution has not been confirmed
-- **THEN** the integration declares no step rather than declaring one that may be wrong
-- **AND** the rounding requirement still guarantees the written value is the closest the device can hold
+- **WHEN** the integration declares a setpoint step
+- **THEN** that step is not presented as the device's storage resolution
+
+#### Scenario: A tenth-degree value is selectable and honoured
+
+- **WHEN** a user selects 20.6 °C on the thermostat card
+- **THEN** the nearest storable value is written
+- **AND** the value reported back rounds to 20.6 °C for display
 
 #### Scenario: An off-grid value already stored on the device is reported as-is
 

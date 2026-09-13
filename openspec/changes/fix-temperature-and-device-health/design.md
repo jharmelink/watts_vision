@@ -15,7 +15,9 @@ The problems in this change were confirmed against a live nine-device installati
 
 Three facts established from that data:
 
-1. **The API unit is deci-Fahrenheit, and the device grid appears to be 0.5 °C.** Every healthy setpoint decodes to an exact half-degree Celsius: `446 → 7.0`, `563 → 13.5`, `572 → 14.0`, `590 → 15.0`, `689 → 20.5`, `698 → 21.0`. The read arithmetic has always been correct; the two historical commits that rewrote the conversion formula (`58f9f60`, `df8486e`) were chasing a bug that was not there. The grid itself is less certain than the unit — see the Risks section.
+1. **The API unit is deci-Fahrenheit, and that is also the storage resolution.** Every healthy setpoint decodes to an exact half-degree Celsius: `446 → 7.0`, `563 → 13.5`, `572 → 14.0`, `590 → 15.0`, `689 → 20.5`, `698 → 21.0`. The read arithmetic has always been correct; the two historical commits that rewrote the conversion formula (`58f9f60`, `df8486e`) were chasing a bug that was not there.
+
+Those clean half-degrees reflect the *physical thermostat's* user interface, not a storage constraint. Writing `690` (69.0 °F, 20.5556 °C) to an active setpoint on hardware and reading it back unchanged confirms the device stores tenths of a degree Fahrenheit and does not quantise to half-degrees Celsius. The true lattice is therefore ≈0.056 °C and irregular in Celsius; no clean Celsius step exists.
 2. **Off-grid setpoints come from the write path.** Two devices hold `591` and `699`, which reproduce exactly from `int(591.8)` and `int(699.8)` — a user requesting 15.1 °C and 21.1 °C through a UI that should never have offered those values, with `int()` truncating instead of rounding.
 3. **Entity loss is caused by `update_before_add=True` plus unguarded access.** Home Assistant drops an entity permanently and silently when its first update raises. A reload of the reference installation produces exactly four errors, which account for every missing entity:
 
@@ -54,7 +56,7 @@ The practical consequence is that the change is designed so that **no open quest
 
 - One conversion boundary between the API's deci-Fahrenheit integers and the rest of the integration.
 - Setpoint writes that round-trip losslessly at whatever resolution the device actually stores.
-- Temperature readings that reach long-term statistics.
+- Temperature readings that are correct in long-term statistics, and sentinels that never enter them.
 - A device that cannot report says so, rather than publishing a plausible-looking number.
 - No entity disappears because of unexpected data.
 
@@ -77,7 +79,11 @@ Two conversion strategies were considered.
 
 **Option B — a single conversion function pair at the API boundary; every entity reports Celsius.** Home Assistant still converts Celsius to Fahrenheit for users on imperial systems, so no user loses anything.
 
-**Chosen: Option B.** The deciding factor is the setpoint grid. That grid is fundamentally Celsius — the device stores whole or half degrees Celsius and the cloud re-expresses them in tenths of a Fahrenheit degree. Under Option A, `target_temperature_step` has to be declared in the entity's unit, making a 0.5 °C step into 0.9 °F: an awkward number, a delta rather than a temperature (so it must not be unit-converted with the offset formula), and a value whose correct handling by the frontend we would have to verify. Under Option B the step is expressed directly in the unit the grid actually lives in, whatever its value turns out to be.
+**Chosen: Option B**, though the margin is narrower than it first appeared.
+
+The original reasoning was that the setpoint grid is fundamentally Celsius, which hardware testing has since disproven: the device stores tenths of a degree Fahrenheit. That removes the strongest argument for Option B, and correspondingly weakens the objection to Option A, since a step declared in Fahrenheit would now be a natural `0.1` rather than an awkward `0.9`.
+
+What still favours Option B is that the conversion happens once, at a boundary, instead of being implicit in each entity's declared unit — which is precisely the failure this change exists to end. Celsius also matches what the physical thermostats display and what the users of a European heating product expect. Revisiting the decision would be churn without a corresponding benefit, but it is recorded as closer than it was, so that a future reader does not treat it as settled on reasoning that no longer holds.
 
 The secondary benefit is that rounding then happens in exactly one place instead of being reimplemented per entity, which is precisely the failure mode this change exists to end.
 
@@ -140,19 +146,15 @@ What can be claimed, and with what confidence:
 
 ```
   error_code == 0        healthy                          confirmed, 7 devices
-  error_code == 12288    accompanies a dead battery       observed, 2 devices,
-                                                          one installation
-  individual bit meanings                                 UNKNOWN — one
-                                                          observation cannot
-                                                          separate bit 12 from
-                                                          bit 13, and a dead
-                                                          battery plausibly
-                                                          raises both a battery
-                                                          bit and a lost-contact
-                                                          bit at once
+  error_code == 12288    the device has stopped           observed, 2 devices,
+                         reporting                        one installation
+  individual bit meanings                                 UNKNOWN
+  a battery-specific signal                               NOT AVAILABLE
 ```
 
-Any battery indication is therefore derived from the observed value with its provenance recorded, not from a decoded bit whose meaning we would be inventing. Distinguishing the bits needs a second fault of a different kind to compare against, which no amount of reading will supply.
+**12288 is not a battery code.** The two devices reporting it do not share a cause: the owner attributes one to a flat battery and considers the other simply broken. A single value covering both means it indicates that the device has stopped reporting, not why. The earlier plan to record 12288 as "observed with dead battery" would have encoded exactly the kind of guess this project forbids, and would have been wrong.
+
+The consequence reaches the entity model. A battery entity cannot be derived from this field, because nothing in it distinguishes a flat battery from failed hardware. What the integration can honestly detect is that a device is faulty, which is what it should report.
 
 ### The operating mode map is disputed and must not be changed blind
 
@@ -255,9 +257,26 @@ This is also why unrecognised values get logged once each. Under the Constraints
 
 **Redaction fails safe.** Diagnostics get pasted into public issue trackers, so the mechanism must protect fields nobody thought about. Home Assistant's `async_redact_data` operates on a named set of keys, which is a deny-list and therefore leaks anything newly added upstream. This is the platform convention — the official Watts integration uses it with a four-key list — so the stricter approach here is a deliberate deviation, justified by a legacy API that can add fields with no notice and no upstream to report them to. Given the API can add fields without warning, the redaction step must be structured so that an unfamiliar key cannot carry a credential or identifier into the output — for example by redacting on key patterns and by never passing the config entry's `data` through unfiltered. Getting this wrong is worse than shipping no diagnostics at all.
 
-### Battery is a binary sensor, not a percentage sensor
+### Report a problem, not a battery
 
-The API exposes a fault code, not a charge level. `BinarySensorDeviceClass.BATTERY` expresses exactly that: on means low. A `SensorDeviceClass.BATTERY` percentage would require inventing numbers we do not have.
+The obvious model for a fault code is `BinarySensorDeviceClass.BATTERY`, so that Home Assistant's standard low-battery handling applies. That was the original decision here and it is wrong.
+
+The field does not carry battery information. `12288` appears on a device with a flat battery and on a device that is simply broken, so it reports that a device has stopped working and nothing more. Declaring a battery entity from it would tell users their battery is flat when their thermostat has failed, which is worse than saying nothing — it sends them to buy batteries for a device that needs replacing.
+
+**Chosen: `BinarySensorDeviceClass.PROBLEM`.** It expresses precisely what is known — this device has a fault — and carries the raw code for diagnosis. A `SensorDeviceClass.BATTERY` percentage was never possible, since there is no charge level anywhere in the payload we have seen.
+
+A battery entity is not ruled out, only unsupported by present evidence. The physical thermostats do display a low-battery warning, so the signal exists at the device; whether it reaches the API is unknown.
+
+There is a testable hypothesis. Both this integration and the Homey app independently label code `1` as battery failure, and `1` is bit 0 — which the faulty devices do **not** set, reporting bits 12 and 13 instead. A consistent reading is:
+
+```
+  bit 0 set (value 1)        low battery, device still alive and transmitting
+  bits 12|13 (value 12288)   device has gone off the air entirely
+```
+
+That would make the original `DEF_BAT_TH → 1` mapping not wrong but simply never reached, since the `KeyError` fires on `12288` long before anyone encounters a `1`. It remains a hypothesis: no installation has been observed reporting `1`, and two implementations agreeing is weak evidence when either may have copied the other.
+
+The test is cheap and needs no code. If a thermostat is currently showing a low-battery warning on its own screen, read that device's `error_code`. A value with bit 0 set confirms the hypothesis and a genuine battery entity becomes possible; `0` proves the warning never reaches the API and the question is settled the other way.
 
 ## Ruled Out
 
@@ -271,9 +290,11 @@ Recorded so they are not re-investigated. Each was a plausible theory about the 
 
 ## Risks / Trade-offs
 
-**Changing a sensor's `native_unit_of_measurement` from °F to °C may invalidate existing statistics.** → Home Assistant detects unit changes on entities with a `state_class` and can raise a statistics issue asking the user to confirm. For metric users the recorded *numbers* are unchanged (the old code already published Celsius), so the series remains continuous in value even if Home Assistant asks about the unit. Call this out in the change notes and verify on the test installation before release.
+**Changing a sensor's `native_unit_of_measurement` from °F to °C could disturb existing statistics.** → Lower risk than first assessed. The unit Home Assistant *reports* for these entities is already °C on a metric system, because `unit_of_measurement` is not overridden and performs the conversion; only the `native` unit changes, and the recorded values are identical either way. Statistics metadata tracks the reported unit, so the series should remain continuous. Verify on the reference installation before release rather than assuming it.
 
-**Long-term statistics may not exist yet for these entities at all.** → Unconfirmed; it depends on whether the overridden `state` property has been blocking the recorder. If nothing was being recorded, there is nothing to invalidate and this risk evaporates. Resolving the open question below settles it.
+**Corrected: statistics were never broken.** → An earlier assessment here held that overriding `state` prevented `state_class = MEASUREMENT` from reaching the recorder. That is wrong, and confirmed wrong on the reference installation, where the temperature sensors appear in Developer Tools → Statistics and are recording. Home Assistant compiles sensor statistics from recorded *states*, not from `native_value`, so the override never stood in the way. The current code is accidentally self-consistent: the hand-rolled conversion produces °C and `unit_of_measurement` reports °C, so value and unit agree.
+
+The consequence runs the other way. Because statistics do work, **every `100.2 °C` dead-battery reading and every `nan` is genuine recorded history**, not a value discarded on the way to the database. The data-hygiene half of this change is the part that matters for statistics; the `native_value` migration is a correctness and maintainability fix carrying no statistics benefit of its own.
 
 **Devices becoming unavailable will break automations that assume a number is always present.** → This is the correct behaviour and the whole point of the change, but it is user-visible and can break a working automation. Document it prominently; a template that averaged house temperature was previously being fed 100.2 °C and was already wrong, just invisibly.
 
@@ -281,9 +302,13 @@ Recorded so they are not re-investigated. Each was a plausible theory about the 
 
 **A plausibility bound could suppress a legitimate extreme reading.** → Bounds are set well outside any room thermostat's real operating range, and the bound is a backstop rather than the primary mechanism. A device reporting a genuine 61 °C has a problem worth surfacing anyway.
 
-**The 0.5 °C grid is less certain than when it was chosen.** → The decision rested on every clean setpoint in the test installation landing on an exact half-degree. Two pieces of counter-evidence have since appeared: the Homey app rounds to 0.1 °C and declares no step at all, and the test installation's own devices *persisted* the off-grid values `591` and `699` rather than snapping them. Both off-grid values sit in inactive comfort setpoints, so the device may never have applied them — which would explain the persistence without disproving the grid. Settle it empirically before implementing task 3.2: write an off-grid value to an **active** setpoint, wait for the device to apply it (the Homey app observes roughly 13 seconds), and see whether the value that comes back has snapped. If it has not, drop the step declaration and keep only the rounding fix.
+**Decided: the card offers 0.1 °C steps.** → With no exact Celsius step available, the choice is a usability one. 0.1 °C makes every value the user might want reachable from the thermostat card, including the 20.6 °C that motivated the hardware test, at a cost of at most ~0.03 °C between what is asked for and what is stored. The alternative, 0.5 °C, would match the wall thermostat's own display exactly but would put 20.6 °C out of reach except through a service call. The owner chose reachability over agreement with the wall unit.
 
-**Declaring a 0.5 °C step is a visible UI change.** → Users who previously dragged to 15.1 °C will find they cannot. They were never getting 15.1 °C; they were getting 15.06 °C. The step change makes an existing limitation honest rather than introducing a new one — provided the grid is real; see above.
+The step is therefore a convenience, not a claim about the device, and must be documented as such.
+
+**Resolved: there is no 0.5 °C grid.** → Writing `690` to the reference installation's *active* comfort setpoint and reading it back unchanged settles this. The device accepts and retains tenths of a degree Fahrenheit. The Homey app and the official Vision+ integration, both of which decline to declare a step, were right to. The remaining question is not what the device can store but what resolution to offer the user — see the open questions.
+
+**Any declared step misrepresents the device slightly.** → The storage lattice is 0.1 °F, so no Celsius step is exact. A requested 20.6 °C is stored as 20.611 °C and displayed as 20.6. This is inherent to a device that stores Fahrenheit being shown to a metric user, and is not introduced by this change; the rounding fix reduces the error rather than creating it.
 
 **Reverting the `round(x * 2, 1) / 2` expression changes displayed values.** → Only for off-grid setpoints, where it currently shows values like 15.05. Those readings were wrong; the change corrects them.
 
@@ -291,7 +316,7 @@ Recorded so they are not re-investigated. Each was a plausible theory about the 
 
 1. Land the conversion boundary and the write-path rounding first — these are self-contained and independently verifiable against the recorded live values (`446 → 7.0`, `689 → 20.5`, `15.1 °C → 592`).
 2. Land the total lookups and feature detection. On the test installation this should make `sensor.error_studio`, `sensor.error_logeer_kamer` and one additional climate entity appear.
-3. Land availability and the battery entity last, since it is the only step that removes data from statistics.
+3. Land availability and the battery entity last, since it is the only step that changes what enters statistics.
 4. Verify on the live installation that the two dead-battery devices report unavailable rather than 100.2 °C, and that their battery entities show low.
 
 Rollback is per-step; nothing here changes stored configuration or the config entry schema, so reverting the component restores previous behaviour without user action.
