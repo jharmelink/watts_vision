@@ -270,6 +270,24 @@ This is also why unrecognised values get logged once each. Under the Constraints
 
 **Redaction fails safe.** Diagnostics get pasted into public issue trackers, so the mechanism must protect fields nobody thought about. Home Assistant's `async_redact_data` operates on a named set of keys, which is a deny-list and therefore leaks anything newly added upstream. This is the platform convention — the official Watts integration uses it with a four-key list — so the stricter approach here is a deliberate deviation, justified by a legacy API that can add fields with no notice and no upstream to report them to. Given the API can add fields without warning, the redaction step must be structured so that an unfamiliar key cannot carry a credential or identifier into the output — for example by redacting on key patterns and by never passing the config entry's `data` through unfiltered. Getting this wrong is worse than shipping no diagnostics at all.
 
+### Naming devices that share a zone is deferred, not solved
+
+A zone is a control grouping, not a location, and the reference installation has
+a thermostat and a receiver in one. Today they are told apart only by Home
+Assistant appending `_2` to whichever it registers second, which depends on the
+order the API returns them in.
+
+An implementation using a stable fragment of the device identifier was written
+and then abandoned. It produced names like "Air temperature Woonkamer ce-1":
+order-independent, but no more meaningful to a user than `_2`, while renaming
+entities that currently work. A change that makes something worse in exchange
+for satisfying a requirement literally is not worth shipping.
+
+**Chosen: defer.** Naming a device needs a name for it, and whether the API
+supplies one is unknown, because nobody has read a raw device payload. The
+diagnostics in this change are what will answer that, which makes this the first
+question to ask of the first export.
+
 ### Report a problem, not a battery
 
 The obvious model for a fault code is `BinarySensorDeviceClass.BATTERY`, so that Home Assistant's standard low-battery handling applies. That was the original decision here and it is wrong.

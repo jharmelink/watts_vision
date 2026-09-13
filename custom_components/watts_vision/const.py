@@ -39,15 +39,25 @@ PRESET_MODE_REVERSE_MAP = {
 
 SCAN_INTERVAL = timedelta(seconds=120)
 
+# `error_code` is a BITFIELD, not an enumeration. The reference installation's
+# two faulty devices both report 12288, which is 0x3000: bits 12 and 13. Any
+# lookup that assumes a short list of discrete codes will eventually miss, which
+# is how the previous ERROR_MAP took two entities down with it.
+#
+# Health is therefore derived structurally -- zero is healthy, anything else is
+# a fault -- and labels are applied only where there is evidence.
 NO_ISSUES = "No issues"
-DEF_BAT_TH = "Battery failure"
+NOT_REPORTING = "Not reporting"
+UNKNOWN_FAULT = "Unrecognised fault"
 
-ERROR_MAP = {
+# Observed, with provenance, not guessed. 12288 appears on a device with a flat
+# battery AND on one the owner considers simply broken, so it says the device
+# has stopped reporting, not why. It is deliberately not labelled as a battery
+# fault: telling someone to replace a battery in a failed thermostat sends them
+# to fix the wrong thing.
+ERROR_LABELS = {
     0: NO_ISSUES,
-    1: DEF_BAT_TH
+    12288: NOT_REPORTING,
 }
 
-ERROR_REVERSE_MAP = {
-    NO_ISSUES: 0,
-    DEF_BAT_TH: 1
-}
+ERROR_OPTIONS = [NO_ISSUES, NOT_REPORTING, UNKNOWN_FAULT]

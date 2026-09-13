@@ -60,6 +60,7 @@ async def init_integration(
     hass: HomeAssistant,
     entry: MockConfigEntry | None = None,
     with_devices: bool = False,
+    zones: list | None = None,
 ) -> MockConfigEntry:
     """Set up the integration with the Watts cloud mocked out.
 
@@ -80,7 +81,7 @@ async def init_integration(
     if with_devices:
         stubs += [
             patch(f"{api}.loadSmartHomes", return_value=[dict(MOCK_SMARTHOME)]),
-            patch(f"{api}.loadDevices", return_value=MOCK_ZONES),
+            patch(f"{api}.loadDevices", return_value=zones or MOCK_ZONES),
             patch(
                 f"{api}.getLastCommunication",
                 return_value=MOCK_LAST_COMMUNICATION,

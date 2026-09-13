@@ -1,7 +1,7 @@
 """Watts Vision sensor platform."""
 from datetime import timedelta
 import logging
-from typing import Callable, Optional
+from typing import Callable
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -11,11 +11,19 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
-from numpy import nan as NaN
 
 from .central_unit import WattsVisionLastCommunicationSensor
-from .const import API_CLIENT, DOMAIN, ERROR_MAP, PRESET_MODE_MAP
+from .const import API_CLIENT, DOMAIN, ERROR_OPTIONS, PRESET_MODE_MAP, UNKNOWN_FAULT
+from .device_state import (
+    error_code,
+    error_label,
+    has_usable_setpoints,
+    is_faulty,
+    iter_devices,
+    target_celsius,
+)
 from .helpers import sub_device_info
+from .temperature import plausible_celsius
 from .watts_api import WattsApi
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,58 +42,52 @@ async def async_setup_entry(
 
     sensors = []
 
-    if smartHomes is not None:
-        for y in range(len(smartHomes)):
-            if smartHomes[y]["zones"] is not None:
-                for z in range(len(smartHomes[y]["zones"])):
-                    if smartHomes[y]["zones"][z]["devices"] is not None:
-                        for x in range(len(smartHomes[y]["zones"][z]["devices"])):
-                            sensors.append(
-                                WattsVisionThermostatSensor(
-                                    wattsClient,
-                                    smartHomes[y]["smarthome_id"],
-                                    smartHomes[y]["zones"][z]["devices"][x]["id"],
-                                    smartHomes[y]["zones"][z]["zone_label"],
-                                )
-                            )
-                            sensors.append(
-                                WattsVisionTemperatureSensor(
-                                    wattsClient,
-                                    smartHomes[y]["smarthome_id"],
-                                    smartHomes[y]["zones"][z]["devices"][x]["id"],
-                                    smartHomes[y]["zones"][z]["zone_label"],
-                                )
-                            )
-                            sensors.append(
-                                WattsVisionSetTemperatureSensor(
-                                    wattsClient,
-                                    smartHomes[y]["smarthome_id"],
-                                    smartHomes[y]["zones"][z]["devices"][x]["id"],
-                                    smartHomes[y]["zones"][z]["zone_label"],
-                                )
-                            )
-                            sensors.append(
-                                WattsVisionErrorSensor(
-                                    wattsClient,
-                                    smartHomes[y]["smarthome_id"],
-                                    smartHomes[y]["zones"][z]["devices"][x]["id"],
-                                    smartHomes[y]["zones"][z]["zone_label"],
-                                )
-                            )
+    for smarthome_id, zone_label, device in iter_devices(smartHomes):
+        sensors.append(
+            WattsVisionThermostatSensor(
+                wattsClient, smarthome_id, device["id"], zone_label
+            )
+        )
+        sensors.append(
+            WattsVisionTemperatureSensor(
+                wattsClient, smarthome_id, device["id"], zone_label
+            )
+        )
+        sensors.append(
+            WattsVisionErrorSensor(wattsClient, smarthome_id, device["id"], zone_label)
+        )
+        # A device with no setpoints -- a receiver, say -- has no target
+        # temperature to report. Creating the entity anyway is what made it
+        # crash on first update and vanish without explanation.
+        if has_usable_setpoints(device):
             sensors.append(
-                WattsVisionLastCommunicationSensor(
-                    wattsClient,
-                    smartHomes[y]["smarthome_id"],
-                    smartHomes[y]["label"],
-                    smartHomes[y]["mac_address"]
+                WattsVisionSetTemperatureSensor(
+                    wattsClient, smarthome_id, device["id"], zone_label
                 )
             )
+        else:
+            _LOGGER.info(
+                "Device %s in zone %s reports no setpoints, so it gets no target "
+                "temperature entity",
+                device["id"],
+                zone_label,
+            )
+
+    for smart_home in smartHomes or []:
+        sensors.append(
+            WattsVisionLastCommunicationSensor(
+                wattsClient,
+                smart_home["smarthome_id"],
+                smart_home["label"],
+                smart_home.get("mac_address"),
+            )
+        )
 
     async_add_entities(sensors, update_before_add=True)
 
 
-class WattsVisionThermostatSensor(SensorEntity):
-    """Representation of a Watts Vision thermostat."""
+class WattsVisionSensor(SensorEntity):
+    """Shared behaviour for the per-device sensors."""
 
     def __init__(self, wattsClient: WattsApi, smartHome: str, id: str, zone: str):
         super().__init__()
@@ -93,31 +95,11 @@ class WattsVisionThermostatSensor(SensorEntity):
         self.smartHome = smartHome
         self.id = id
         self.zone = zone
-        self._name = "Heating mode " + zone
-        self._state = None
-        self._available = True
 
     @property
-    def unique_id(self) -> str:
-        """Return the unique ID of the sensor."""
-        return "thermostat_mode_" + self.id
-
-    @property
-    def name(self) -> str:
-        """Return the name of the entity."""
-        return self._name
-
-    @property
-    def state(self) -> Optional[str]:
-        return self._state
-
-    @property
-    def device_class(self):
-        return SensorDeviceClass.ENUM
-
-    @property
-    def options(self):
-        return list(PRESET_MODE_MAP.values())
+    def device(self):
+        """Return the cached device, which may be absent after a failed load."""
+        return self.client.getDevice(self.smartHome, self.id)
 
     @property
     def device_info(self):
@@ -125,50 +107,47 @@ class WattsVisionThermostatSensor(SensorEntity):
             self.hass, self.smartHome, self.id, "Thermostat " + self.zone
         )
 
-    async def async_update(self):
-        smartHomeDevice = self.client.getDevice(self.smartHome, self.id)
 
-        self._state = PRESET_MODE_MAP[smartHomeDevice["gv_mode"]]
+class WattsVisionThermostatSensor(WattsVisionSensor):
+    """The operating mode a device is in."""
 
-
-class WattsVisionTemperatureSensor(SensorEntity):
-    """Representation of a Watts Vision temperature sensor."""
+    _attr_device_class = SensorDeviceClass.ENUM
 
     def __init__(self, wattsClient: WattsApi, smartHome: str, id: str, zone: str):
-        super().__init__()
-        self.client = wattsClient
-        self.smartHome = smartHome
-        self.id = id
-        self.zone = zone
-        self._name = "Air temperature " + zone
-        self._state = None
-        self._available = True
+        super().__init__(wattsClient, smartHome, id, zone)
+        self._attr_name = "Heating mode " + zone
+        self._attr_options = list(PRESET_MODE_MAP.values())
+
+    @property
+    def unique_id(self) -> str:
+        """Return the unique ID of the sensor."""
+        return "thermostat_mode_" + self.id
+
+    async def async_update(self):
+        device = self.device
+        mode = PRESET_MODE_MAP.get(str(device.get("gv_mode"))) if device else None
+        # An unrecognised mode leaves the entity unknown rather than raising,
+        # which previously destroyed it.
+        self._attr_available = device is not None
+        self._attr_native_value = mode
+
+
+class WattsVisionTemperatureSensor(WattsVisionSensor):
+    """The air temperature a device measures."""
+
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_suggested_display_precision = 1
+
+    def __init__(self, wattsClient: WattsApi, smartHome: str, id: str, zone: str):
+        super().__init__(wattsClient, smartHome, id, zone)
+        self._attr_name = "Air temperature " + zone
 
     @property
     def unique_id(self) -> str:
         """Return the unique ID of the sensor."""
         return "temperature_air_" + self.id
-
-    @property
-    def name(self) -> str:
-        """Return the name of the entity."""
-        return self._name
-
-    @property
-    def state(self) -> Optional[str]:
-        return self._state
-
-    @property
-    def state_class(self):
-        return SensorStateClass.MEASUREMENT
-
-    @property
-    def device_class(self):
-        return SensorDeviceClass.TEMPERATURE
-
-    @property
-    def native_unit_of_measurement(self):
-        return UnitOfTemperature.FAHRENHEIT
 
     @property
     def device_info(self):
@@ -181,135 +160,77 @@ class WattsVisionTemperatureSensor(SensorEntity):
         )
 
     async def async_update(self):
-        smartHomeDevice = self.client.getDevice(self.smartHome, self.id)
-        if self.hass.config.units.temperature_unit == UnitOfTemperature.CELSIUS:
-            self._state = round(
-                ((float(smartHomeDevice["temperature_air"]) / 10.0) - 32) * (5.0 / 9.0), 1
-            )
-            # self._state = round(
-            #     (int(smartHomeDevice["temperature_air"]) - 320) * 5 / 9 / 10, 1
-            # )
-        else:
-            self._state = int(smartHomeDevice["temperature_air"]) / 10
+        device = self.device
+        celsius = plausible_celsius(device.get("temperature_air")) if device else None
+        # A device that has stopped reporting sends a sentinel, not nothing.
+        # Publishing it wrote about 100 C into long-term statistics as a room
+        # temperature; going unavailable keeps it out.
+        self._attr_available = celsius is not None
+        self._attr_native_value = celsius
 
 
-class WattsVisionSetTemperatureSensor(SensorEntity):
-    """Representation of a Watts Vision temperature sensor."""
+class WattsVisionSetTemperatureSensor(WattsVisionSensor):
+    """The target temperature of a device's active mode."""
+
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_suggested_display_precision = 1
 
     def __init__(self, wattsClient: WattsApi, smartHome: str, id: str, zone: str):
-        super().__init__()
-        self.client = wattsClient
-        self.smartHome = smartHome
-        self.id = id
-        self.zone = zone
-        self._name = "Target temperature " + zone
-        self._state = None
-        self._available = True
+        super().__init__(wattsClient, smartHome, id, zone)
+        self._attr_name = "Target temperature " + zone
 
     @property
     def unique_id(self) -> str:
         """Return the unique ID of the sensor."""
         return "target_temperature_" + self.id
 
-    @property
-    def name(self) -> str:
-        """Return the name of the entity."""
-        return self._name
-
-    @property
-    def state(self) -> Optional[str]:
-        return self._state
-
-    @property
-    def state_class(self):
-        return SensorStateClass.MEASUREMENT
-
-    @property
-    def device_class(self):
-        return SensorDeviceClass.TEMPERATURE
-
-    @property
-    def native_unit_of_measurement(self):
-        return UnitOfTemperature.FAHRENHEIT
-
-    @property
-    def device_info(self):
-        return sub_device_info(
-            self.hass, self.smartHome, self.id, "Thermostat " + self.zone
-        )
-
     async def async_update(self):
-        smartHomeDevice = self.client.getDevice(self.smartHome, self.id)
-
-        if smartHomeDevice["gv_mode"] == "0":
-            self._state = smartHomeDevice["consigne_confort"]
-        if smartHomeDevice["gv_mode"] == "1":
-            self._state = NaN
-        if smartHomeDevice["gv_mode"] == "2":
-            self._state = smartHomeDevice["consigne_hg"]
-        if smartHomeDevice["gv_mode"] == "3":
-            self._state = smartHomeDevice["consigne_eco"]
-        if smartHomeDevice["gv_mode"] == "4":
-            self._state = smartHomeDevice["consigne_boost"]
-        if smartHomeDevice["gv_mode"] == "11" or smartHomeDevice["gv_mode"] == "8":
-            self._state = smartHomeDevice["consigne_manuel"]
-        if self._state != NaN:
-            if self.hass.config.units.temperature_unit == UnitOfTemperature.CELSIUS:
-                # self._state = round((int(self._state) - 320) * 5 / 9 / 10, 1)
-                self._state = round(
-                    (
-                        (
-                            float(self._state) / 10.0
-                        ) - 32
-                    ) * (5.0 / 9.0) * 2, 1
-                ) / 2
-            else:
-                self._state = int(self._state) / 10
+        device = self.device
+        self._attr_available = device is not None and not is_faulty(device)
+        # A mode with no target -- off, or one we do not recognise -- reports
+        # unknown. It used to publish the literal string "nan".
+        self._attr_native_value = target_celsius(device)
 
 
-class WattsVisionErrorSensor(SensorEntity):
-    """Representation of a Watts Vision battery sensor."""
+class WattsVisionErrorSensor(WattsVisionSensor):
+    """Whatever fault a device is reporting."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
 
     def __init__(self, wattsClient: WattsApi, smartHome: str, id: str, zone: str):
-        super().__init__()
-        self.client = wattsClient
-        self.smartHome = smartHome
-        self.id = id
-        self.zone = zone
-        self._name = "Error " + zone
-        self._state = None
-        self._available = True
+        super().__init__(wattsClient, smartHome, id, zone)
+        self._attr_name = "Error " + zone
+        self._attr_options = ERROR_OPTIONS
+        self._reported_codes: set = set()
 
     @property
     def unique_id(self) -> str:
         """Return the unique ID of the sensor."""
         return "error_" + self.id
 
-    @property
-    def name(self) -> str:
-        """Return the name of the entity."""
-        return self._name
-
-    @property
-    def state(self) -> Optional[str]:
-        if self.client.getDevice(self.smartHome, self.id)['error_code'] > 1:
-            _LOGGER.warning('Thermostat battery for device %s is (almost) empty.', self.id)
-        return self._state
-
-    @property
-    def device_class(self):
-        return SensorDeviceClass.ENUM
-   
-    @property
-    def options(self):
-        return list(ERROR_MAP.values())
-
-    @property
-    def device_info(self):
-        return sub_device_info(
-            self.hass, self.smartHome, self.id, "Thermostat " + self.zone
-        )
-    
     async def async_update(self):
-        smartHomeDevice = self.client.getDevice(self.smartHome, self.id)
-        self._state = ERROR_MAP[smartHomeDevice["error_code"]]
+        device = self.device
+        self._attr_available = device is not None
+        if device is None:
+            return
+
+        label = error_label(device)
+        self._attr_native_value = label
+        # The raw value is the only thing a user of an undocumented API can
+        # usefully report, so it is always exposed, recognised or not.
+        self._attr_extra_state_attributes = {"raw_error_code": error_code(device)}
+
+        code = error_code(device)
+        if label == UNKNOWN_FAULT and code not in self._reported_codes:
+            # Once per code per device: an unrecognised code is a normal
+            # operating condition here, but it is still the signal that the
+            # API has moved, and it should not flood the log to say so.
+            self._reported_codes.add(code)
+            _LOGGER.warning(
+                "Device %s reports an unrecognised fault code %s. Please report "
+                "this, with what the device itself is showing",
+                self.id,
+                code,
+            )
