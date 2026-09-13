@@ -2,14 +2,17 @@
 
 # Watts Vision for Home Assistant
 
-These are my first steps in creating an add on for home assistant and learning python. There's a lot left to do, including:
-- All the things that aren't default options, like program, stop boost, etc.
+A Home Assistant integration for the **original Watts Vision** smart home heating system.
 
-I'm learning by doing. Please be kind.
+This is a fork of [pwesters/watts_vision](https://github.com/pwesters/watts_vision), where the integration was written and where most of it still comes from. Thanks to [@pwesters](https://github.com/pwesters), [@nowarries](https://github.com/nowarries) and [@mirakels](https://github.com/mirakels).
 
-> **Stopping a boost is done** — see [Boost](#boost) below. Setting a boost's duration works too, rather than always getting two hours.
->
-> Program mode can be selected and read, but the weekly schedule itself still cannot be edited from Home Assistant. The schedule turns out to be in the data the integration already receives — 48 half-hour slots across seven days — so it is no longer out of reach, just unwritten.
+## Still to do
+
+- **Editing the weekly programme.** Program mode can be selected and read, but the schedule behind it cannot be changed from Home Assistant. It turns out to be in the data the integration already receives — 48 half-hour slots across seven days — so it is reachable, just unwritten.
+- **Cooling.** The devices report a heat/cool flag that nothing acts on.
+- **Confirming what the operating mode numbers mean.** The integration's mapping disagrees with another implementation of the same API on four of seven values. The evidence favours this one, but only cycling a thermostat through every mode would settle it, so the mapping is left alone rather than changed on a guess.
+
+Choosing a boost's duration and stopping one early used to be on this list; both now work, see [Boost](#boost).
 
 ## Which integration do you need?
 
