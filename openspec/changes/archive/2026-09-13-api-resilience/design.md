@@ -135,6 +135,23 @@ Steps 1 and 2 are independently shippable and carry almost no risk. Step 3 is wh
 
 Rollback is per-step. Nothing here touches stored configuration or the config entry schema.
 
+## Verification
+
+Confirmed on the reference installation: setup succeeds normally, and a
+deliberately wrong password reports invalid credentials rather than a generic
+failure.
+
+Not confirmed live: the `cannot_connect` path, which needs the host
+disconnected from the internet. Unit tests cover connection failure and timeout
+at the client, and the mapping onto the form, but nobody has yet watched a real
+outage produce the new message. Worth noticing the next time one happens — the
+reference installation had a DNS outage on 2026-09-11, so they do occur.
+
+Note that verifying the wrong-password case proves only that the working case
+still works. Under the previous code `test_authentication` swallowed every
+exception into `False`, so an outage reported invalid credentials too; the
+distinction is the deliverable, and only half of it has been seen.
+
 ## Open Questions
 
 - **What timeout value?** Needs observed response times from the live installation. A first guess of 30 seconds is comfortably above a normal response and well below the 120-second poll interval, but it is a guess.

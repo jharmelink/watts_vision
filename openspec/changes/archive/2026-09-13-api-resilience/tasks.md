@@ -43,12 +43,12 @@
 
 ## 7. Open questions to settle
 
-- [ ] 7.1 Record observed response times from the live installation and confirm or adjust the 30 second timeout, which is documented in the code as a conservative choice made without measurements
+- [ ] 7.1 (deferred, needs no code) Record observed response times from the live installation and confirm or adjust the 30 second timeout, which is documented in the code as a conservative choice made without measurements
 - [x] 7.2 Determine whether response code `8` is a success, and accept it if so
 - [x] 7.3 Agree explicitly with `fix-temperature-and-device-health` whether a failed refresh clears or keeps the cache, and record the decision in both designs
 
 ## 8. Release
 
 - [x] 8.1 Run the existing test suite and the pre-commit hooks
-- [ ] 8.2 Verify on the live installation that setup succeeds normally and that a deliberately wrong password reports invalid credentials rather than a generic error
+- [x] 8.2 Verified on the live installation: the integration sets up normally and a deliberately wrong password reports "Email and/or password invalid". The `cannot_connect` path was not exercised, since it needs the host disconnected from the internet; it is covered by unit tests but unobserved in the wild
 - [x] 8.3 Bump the version in `manifest.json`
