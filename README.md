@@ -7,6 +7,25 @@ These are my first steps in creating an add on for home assistant and learning p
 
 I'm learning by doing. Please be kind.
 
+## Which integration do you need?
+
+This integration is for the **original Watts Vision** system. If you have **Watts Vision+**, use the official [Watts Vision +](https://www.home-assistant.io/integrations/watts/) integration instead — it is built and maintained by Watts, ships with Home Assistant, and needs no HACS.
+
+**Check your central unit**, not your thermostats:
+
+| Your central unit | Use this |
+|---|---|
+| **BT-CT02-RF** (or older) | This integration |
+| **BT-CT03-RF**, **BT-ST03-RF** | The official [Watts Vision +](https://www.home-assistant.io/integrations/watts/) integration |
+
+The central unit is what talks to the Watts cloud, so it decides which system you are on. Thermostat models are not a reliable guide — a BT-D03-RF thermostat works with both generations, but paired to a BT-CT02-RF central unit it can only reach the original platform.
+
+The two systems use completely separate clouds and log-ins, so there is no overlap and nothing to migrate. If the official integration supports your hardware, prefer it.
+
+### A note on support
+
+Watts has moved on to Vision+, and the original platform receives no further attention from them. This integration talks to an undocumented API that can change without warning, and there is nobody upstream to report problems to. It aims to fail visibly rather than silently: when something cannot be read, entities are expected to go *unavailable* rather than show a wrong value.
+
 ## Requirements
 A Watts Vision system Cental unit is required to be able to see the settings remotely. See [Watts Vision Smart Home](https://wattswater.eu/catalog/regulation-and-control/watts-vision-smart-home/) and watch the [guide on youtube (Dutch)](https://www.youtube.com/watch?v=BLNqxkH7Td8).
 
