@@ -17,7 +17,17 @@ Three facts established from that data:
 
 1. **The API unit is deci-Fahrenheit, and the device grid appears to be 0.5 °C.** Every healthy setpoint decodes to an exact half-degree Celsius: `446 → 7.0`, `563 → 13.5`, `572 → 14.0`, `590 → 15.0`, `689 → 20.5`, `698 → 21.0`. The read arithmetic has always been correct; the two historical commits that rewrote the conversion formula (`58f9f60`, `df8486e`) were chasing a bug that was not there. The grid itself is less certain than the unit — see the Risks section.
 2. **Off-grid setpoints come from the write path.** Two devices hold `591` and `699`, which reproduce exactly from `int(591.8)` and `int(699.8)` — a user requesting 15.1 °C and 21.1 °C through a UI that should never have offered those values, with `int()` truncating instead of rounding.
-3. **Entity loss is caused by `update_before_add=True` plus unguarded lookups.** `ERROR_MAP[error_code]` raises `KeyError` for an unmapped code, and `smartHomeDevice["consigne_confort"]` raises `KeyError` for a device without setpoints. In both cases Home Assistant drops the entity silently and permanently.
+3. **Entity loss is caused by `update_before_add=True` plus unguarded access.** Home Assistant drops an entity permanently and silently when its first update raises. A reload of the reference installation produces exactly four errors, which account for every missing entity:
+
+```
+  sensor.py:339   x2   ERROR_MAP[device["error_code"]]        the two dead batteries
+  sensor.py:279   x1   float(self._state) / 10.0              the receiver's target temp
+  climate.py:139  x1   float(device["min_set_point"]) / 10    the receiver's climate
+```
+
+**The failing values are present but null, not absent.** This matters and was initially got wrong. The target-temperature sensor fails at line 279 rather than at line 262, where `self._state = device["consigne_confort"]` would have raised `KeyError` had the key been missing; it reaches the conversion with `self._state` set to `None`. The device's `gv_mode` is `"0"`, confirmed by its heating-mode sensor reporting comfort, so that branch did run. Likewise `climate.py` clears line 137 reading `temperature_air` — the receiver does report a temperature — and fails one line later on `min_set_point`.
+
+So the receiver's payload carries the setpoint keys with null values rather than omitting them. Any feature detection based on key presence would therefore conclude the device has setpoints and go on to crash exactly as before.
 
 ### Constraints
 
@@ -113,17 +123,36 @@ Because the API is undocumented and cannot be clarified (see Constraints), the i
 
 This ships correctly without knowing what any particular nonzero code means. Discovering that a specific code indicates battery failure only improves the *label*; it does not change the behaviour.
 
-Third-party evidence now exists for the code space. The Homey app decodes:
+**Observed on hardware: `error_code` is a bitfield.** The reference installation's two dead-battery devices both raise `KeyError: 12288` at `sensor.py:339`:
 
 ```
-  1  Battery failure          2  Temperature sensor fault
-  3  Communication error      4  Floor sensor fault
-                                 default: "Hardware error code N"
+  12288  =  0x3000  =  0b11000000000000   bits 12 and 13 set
+  healthy devices report 0                 no bits set
 ```
 
-This corroborates the existing `DEF_BAT_TH → 1` mapping, which changes the picture: the two dead-battery devices in the test installation are **not** reporting code `1`, because `ERROR_MAP[1]` would have resolved and their entities would exist. Combined with their sentinel temperature reading, **code `3`, communication error, is the leading hypothesis** — a dead battery stops the thermostat transmitting, the gateway loses contact, and reports both a comms fault and a placeholder temperature.
+The value is an `int`, and it is identical on both faulty devices. This is decisive about the *shape* of the data and it invalidates how every known implementation models it. This integration's `ERROR_MAP = {0: ..., 1: ...}` and the Homey app's `{1: battery, 2: temperature sensor, 3: communication, 4: floor sensor}` both treat the field as a small enumeration of discrete codes. A bitfield cannot be looked up that way: the number of distinct values is combinatorial, so any dict will eventually miss, and `3` as "communication error" is indistinguishable from bits 0 and 1 set together.
 
-These labels SHALL be adopted as plausible defaults with their provenance recorded, not asserted as fact. The structural rule above is what the behaviour depends on; the labels are cosmetic and replaceable. Task 1.1 still settles it from the logs.
+The earlier hypothesis recorded here — that a dead battery reports code `3` — is disproven.
+
+This vindicates the structural rule rather than undermining it. "Zero is healthy, nonzero is a fault" is correct for a bitfield as well as an enumeration, so the specified behaviour needs no change; only the labelling does. It is also a sharper lesson than the one first drawn: the original `ERROR_MAP` was not merely a guess about which *values* meant what, it was a guess about the *shape of the data*, and that is the kind of guess this project must not encode.
+
+What can be claimed, and with what confidence:
+
+```
+  error_code == 0        healthy                          confirmed, 7 devices
+  error_code == 12288    accompanies a dead battery       observed, 2 devices,
+                                                          one installation
+  individual bit meanings                                 UNKNOWN — one
+                                                          observation cannot
+                                                          separate bit 12 from
+                                                          bit 13, and a dead
+                                                          battery plausibly
+                                                          raises both a battery
+                                                          bit and a lost-contact
+                                                          bit at once
+```
+
+Any battery indication is therefore derived from the observed value with its provenance recorded, not from a decoded bit whose meaning we would be inventing. Distinguishing the bits needs a second fault of a different kind to compare against, which no amount of reading will supply.
 
 ### The operating mode map is disputed and must not be changed blind
 
@@ -180,9 +209,33 @@ The official integration's documentation supplies the first real inventory of Wa
                PR03-RF     PR03-RF16   BT-WR03-RF  BT-WR02-RF
 ```
 
-Several of these are plainly not thermostats. `BT-TH02-RF` is the leading candidate for the reference installation's setpoint-less ninth device — it reports a temperature, a mode, a heating state and an error code but no `consigne_*`, which is what a sensor rather than a thermostat would produce. Receiver and relay modules such as `PR03-RF` and `BT-WR02-RF` would produce a similar shape. This list is a hypothesis generator, not a supported-device list for this integration.
+Several of these are plainly not thermostats. The reference installation's owner identifies the setpoint-less ninth device as a **BT-WR02-RF wireless receiver** — a relay that switches a heating circuit rather than measuring or targeting a temperature. This is an owner's recollection, not yet confirmed from the API payload, and is recorded as tentative.
 
-**Chosen: field presence.** We do not have a list of Watts device types, we cannot enumerate what future ones report, and the failure mode of guessing wrong is the silent entity loss we are trying to eliminate. Checking for the fields an entity needs, before creating that entity, is total by construction. The device type reported by the API is used for the device registry model string, but not to gate entity creation.
+It fits the observed shape better than a sensor would. A receiver has no setpoints, which is exactly why its climate and target-temperature entities crash; its `heating_up` value is the genuinely meaningful signal, being the actual relay state rather than a thermostat's demand; and its reported 12.0 °C is plausibly the ambient temperature wherever it is mounted — a cupboard or plant room — rather than the living room it is grouped with by zone.
+
+That last point exposes a naming problem this change does not currently address. Entity names are built from `zone_label`, so this device produces `sensor.air_temperature_woonkamer` reading 12.0 °C while the actual living room reads 20.6 °C. The zone is a control grouping, not a location, and for a device that is not in the room the name is actively wrong.
+
+The receiver is **read-only** — it reports its state but cannot be commanded. So no `switch` entity is wanted, despite the official Vision+ integration modelling its own `SwitchDevice` type that way; a switch would imply control that does not exist. A binary sensor carrying the relay state is the correct model, and the device already has one.
+
+That makes the required outcome for this device unusually modest. The entity set it *should* have is the one it already has, minus the two that currently crash:
+
+```
+  heating (binary sensor)   relay state        keep — the useful signal
+  air temperature           ambient where      keep, but see the naming
+                            it is mounted           problem above
+  heating mode              mirrors the zone   keep
+  error                     fault code         keep
+  climate                   CRASHES            correct that it is absent
+  target temperature        CRASHES            correct that it is absent
+```
+
+The two entities that fail to be created are precisely the two that ought not to exist. The current behaviour is therefore accidentally right, by the wrong mechanism: a `KeyError` that leaves no explanation a user could act on, and that would produce a different and possibly worse outcome if the payload changed. The work is to reach the same result deliberately — which `device-discovery` already specifies — rather than to change which entities exist.
+
+This list is a hypothesis generator, not a supported-device list for this integration.
+
+**Chosen: usable values, not key presence.** We do not have a list of Watts device types, we cannot enumerate what future ones report, and the failure mode of guessing wrong is the silent entity loss we are trying to eliminate.
+
+The test must be that the fields an entity needs carry values it can actually use — not that the keys exist. The reference installation's receiver reports `consigne_confort` and `min_set_point` as **null**, so `"consigne_confort" in device` is `True` while `float(device["consigne_confort"])` raises. A presence check would reproduce the current bug exactly. The device type reported by the API is used for the device registry model string, but not to gate entity creation.
 
 ### Preserve every existing unique_id
 

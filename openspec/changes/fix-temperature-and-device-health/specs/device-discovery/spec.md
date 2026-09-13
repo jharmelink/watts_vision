@@ -2,18 +2,24 @@
 
 ### Requirement: Entities are created from the fields a device reports
 
-The integration SHALL decide which entities to create for a device based on the fields that device actually reports. A device that does not report setpoint fields MUST NOT be given a climate entity or a target temperature entity, and its remaining entities MUST still be created.
+The integration SHALL decide which entities to create for a device based on whether that device supplies values those entities can use. A field that is present but null MUST be treated the same as a field that is absent; a key-presence test is not sufficient. A device that supplies no usable setpoint MUST NOT be given a climate entity or a target temperature entity, and its remaining entities MUST still be created.
 
 #### Scenario: A device without setpoints still yields its usable entities
 
-- **WHEN** a device reports `temperature_air`, `gv_mode`, `heating_up` and `error_code` but no `consigne_*` fields
+- **WHEN** a device reports usable `temperature_air`, `gv_mode`, `heating_up` and `error_code` but no usable setpoint
 - **THEN** its air temperature, heating mode, heating state and error entities are created
 - **AND** no climate entity and no target temperature entity are created for it
 - **AND** no entity creation raises
 
+#### Scenario: A null field is treated as absent
+
+- **WHEN** a device reports a setpoint key whose value is null
+- **THEN** that setpoint is treated as unavailable
+- **AND** no entity is created that would depend on converting it
+
 #### Scenario: A full thermostat yields the full entity set
 
-- **WHEN** a device reports setpoint fields
+- **WHEN** a device reports usable setpoint values
 - **THEN** a climate entity and a target temperature entity are created alongside its other entities
 
 ### Requirement: Partial device data degrades without silent entity loss

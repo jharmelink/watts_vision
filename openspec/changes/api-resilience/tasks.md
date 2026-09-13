@@ -2,6 +2,7 @@
 
 - [ ] 1.1 Add an exception hierarchy: a base error plus invalid credentials, rejected token, cloud unreachable, and API error response
 - [ ] 1.2 Add an internal request helper that owns the timeout, the response check, and error raising, and route all five `requests.post` call sites through it
+- [ ] 1.2a Catch every `requests` exception at that boundary and re-raise as an integration type, so no `requests` class can reach a caller — verified against the 2026-09-11 DNS outage traceback
 - [ ] 1.3 Make the helper name the failing operation in every log entry and exception, replacing the hardcoded "Something went wrong fetching user data"
 - [ ] 1.4 Add tests covering each failure class: timeout, connection error, HTTP 401, an error code in a well-formed response, and success
 

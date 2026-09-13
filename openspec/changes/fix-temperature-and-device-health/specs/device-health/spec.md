@@ -21,6 +21,8 @@ The integration SHALL tolerate any `error_code` value the API returns, including
 
 The integration SHALL derive device health structurally from whether an error code is zero, not from an enumeration of codes. It MUST NOT attribute a specific fault meaning to a code for which there is no direct evidence.
 
+The field is a bitfield rather than an enumeration — observed values include `12288`, which is bits 12 and 13 — so the integration MUST NOT assume the value space is small or enumerable. It MUST NOT claim a meaning for an individual bit without evidence separating that bit from others set alongside it.
+
 #### Scenario: A nonzero code is treated as a fault without being named
 
 - **WHEN** a device reports a nonzero `error_code` whose meaning is unknown
@@ -32,6 +34,12 @@ The integration SHALL derive device health structurally from whether an error co
 
 - **WHEN** a device reports an error code the integration has confirmed evidence for
 - **THEN** the reported state uses the specific label for that fault
+
+#### Scenario: A large or composite code does not break the lookup
+
+- **WHEN** a device reports an error code with several bits set, such as `12288`
+- **THEN** the device is treated as faulted
+- **AND** the raw value is reported without the integration attempting to enumerate it
 
 #### Scenario: Zero means healthy
 
@@ -50,9 +58,15 @@ The integration SHALL expose each battery-powered device's battery condition usi
 
 #### Scenario: A failed battery is surfaced
 
-- **WHEN** a device reports the error code that indicates battery failure
+- **WHEN** a device reports an error code observed to accompany battery failure
 - **THEN** its battery entity reports a low or failed battery state
 - **AND** the condition is visible without the user inspecting logs
+
+#### Scenario: A battery claim rests on observation, not on a decoded bit
+
+- **WHEN** the integration reports a battery fault
+- **THEN** that conclusion derives from an error code value observed to accompany a real dead battery
+- **AND** not from assigning a meaning to an individual bit that no observation has isolated
 
 ### Requirement: A device that cannot report goes unavailable
 

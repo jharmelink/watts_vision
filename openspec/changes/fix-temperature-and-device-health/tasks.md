@@ -2,8 +2,9 @@
 
 None of these block implementation, and none require contact with Watts. Each is answerable on the live installation and sharpens a label or a default.
 
-- [ ] 1.1 Retrieve the `KeyError` from the live installation's logs and record the actual `error_code` reported by a dead-battery device
-- [ ] 1.2 Identify the second woonkamer device — its API device type and whether 12.0 °C is a real reading — testing `BT-TH02-RF` and the receiver modules as candidates, and record the finding in design.md
+- [x] 1.1a Mechanism confirmed from logs: `sensor.py:339` raises for exactly the two dead-battery devices, accounting for both missing error entities
+- [x] 1.1b Value confirmed: `KeyError: 12288` (0x3000, bits 12 and 13) on both dead-battery devices; `error_code` is an int bitfield, not an enumeration
+- [ ] 1.2 Confirm the second woonkamer device is a BT-WR02-RF receiver (owner's tentative identification, recorded in design.md) and whether its 12.0 °C is a real ambient reading
 - [ ] 1.3 Check Developer Tools → Statistics for the Watts temperature sensors and record whether long-term statistics currently exist
 - [ ] 1.4 Settle the 0.5 °C grid empirically: write an off-grid value to an *active* setpoint, wait for the device to apply it, and record whether the value that comes back has snapped
 
@@ -26,10 +27,10 @@ None of these block implementation, and none require contact with Watts. Each is
 
 ## 4. Total lookups and feature detection
 
-- [ ] 4.1 Make device health structural — zero is healthy, nonzero is a fault — so no error code can raise, and expose the raw code for unrecognised ones
-- [ ] 4.2 Adopt the third-party error labels (1 battery, 2 temperature sensor, 3 communication, 4 floor sensor) as documented defaults with their provenance recorded, superseded by task 1.1 where it disagrees
+- [ ] 4.1 Make device health structural — zero is healthy, nonzero is a fault — so no error code can raise regardless of how many bits are set, and expose the raw value for unrecognised ones
+- [ ] 4.2 Replace `ERROR_MAP` with bitfield-safe handling; label `12288` as observed-with-dead-battery with its provenance, and discard the third-party discrete-code labels, which assume a shape the data does not have
 - [ ] 4.3 Make the `gv_mode` to preset lookup total so an unmapped mode cannot destroy a climate or sensor entity, leaving the existing mode mapping unchanged
-- [ ] 4.4 Gate creation of climate and target-temperature entities on the presence of the `consigne_*` fields the entity needs
+- [ ] 4.4 Gate creation of climate and target-temperature entities on the device supplying *usable* setpoint and range values — treating present-but-null the same as absent, since the reference receiver reports `consigne_confort` and `min_set_point` as null
 - [ ] 4.5 Derive the device registry model from API data instead of hardcoding `BT-D03-RF` in the entity platforms and `BT-CT02-RF` in `central_unit.py`, leaving it unset when unknown
 - [ ] 4.6 Distinguish entity names for multiple devices sharing a zone without relying on Home Assistant's numeric suffixing
 - [ ] 4.7 Verify every existing `unique_id` format is unchanged
@@ -54,7 +55,7 @@ None of these block implementation, and none require contact with Watts. Each is
 ## 7. Verification on the live installation
 
 - [ ] 7.1 Confirm `sensor.error_studio` and `sensor.error_logeer_kamer` now exist
-- [ ] 7.2 Confirm the second woonkamer device's missing entities now appear, or are deliberately and visibly absent
+- [ ] 7.2 Confirm the second woonkamer device keeps its four working entities, and that its climate and target-temperature entities are deliberately and visibly absent rather than crashing
 - [ ] 7.3 Confirm the two dead-battery devices report unavailable instead of 100.2 °C, and that their battery entities show low
 - [ ] 7.4 Confirm the climate entity and the target temperature sensor report identical values for the same device, at 0.5 °C resolution
 - [ ] 7.5 Set a thermostat to 20.5 °C, wait for a refresh, and confirm `consigne_confort` reads back as exactly `689`

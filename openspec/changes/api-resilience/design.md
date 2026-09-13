@@ -4,6 +4,19 @@
 
 Its error handling has one shape throughout: detect a problem, log it, return a falsy value. `check_response` returns `False`; `loadSmartHomes`, `loadDevices` and `getLastCommunication` return `None`; `pushTemperature` returns `False`; `reloadDevices` returns `True` regardless. Nothing raises anything a caller can act on.
 
+There is a second failure mode, and it is the opposite of the first. When the transport itself fails, nothing is swallowed — a raw `requests` exception escapes the client entirely. A DNS outage on the reference installation on 2026-09-11 produced exactly this:
+
+```
+  requests.exceptions.ConnectionError  propagated unhandled out of
+
+    central_unit.py:51   async_update          →  getLastCommunication
+    __init__.py:38       refresh_devices       →  reloadDevices → loadDevices
+                                               →  _refresh_token_if_expired
+                                               →  getLoginToken
+```
+
+`check_response` was never reached; `requests` raised before any response existed. So the client swallows API-level errors into `None` and leaks transport errors as third-party exception types, and a caller has to handle both. During that outage no entity went unavailable — they logged and kept reporting stale values, which is precisely the behaviour `fix-temperature-and-device-health` requires fixing and cannot fix alone.
+
 The consequences are visible at both ends of the integration. At setup, `async_setup_entry` wraps the login in a bare `except Exception` and returns `False`, so every failure looks the same to Home Assistant. At the entity end, a failed refresh leaves `getDevice` returning `None` and entities immediately index into it.
 
 Three defects sit in `getLoginToken` specifically, confirmed present at the time of writing:
@@ -48,6 +61,8 @@ Four methods carry a `firstTry` parameter that no body references — `loadSmart
 The existing code contains commented-out `APIException`, `UnauthorizedException` and `UnHandledStatuException` raises, so the original author reached for exactly this and then backed it out — presumably because nothing was ready to catch them.
 
 **Chosen:** a small exception hierarchy with one base class, and distinct subclasses for invalid credentials, a rejected token, an unreachable cloud, and an API-level error response. Callers that currently test for `None` become callers that catch.
+
+This must cover transport failures as well as API-level ones. Every `requests` exception — connection, DNS, timeout, read — is caught at the request boundary and re-raised as the integration's own type, so no caller ever sees a `requests` class. Today a `ConnectionError` reaching an entity update is a third-party exception nobody declared, which is why it escapes.
 
 Four classes, not more. The distinctions that matter are the ones a caller acts on differently:
 

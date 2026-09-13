@@ -19,6 +19,7 @@ This matters more here than in an integration with an upstream. The API is undoc
 **Failure reporting**
 
 - Replace `None` and `False` returns with typed exceptions so callers can distinguish authentication failure, connectivity failure, and an API-level error response.
+- Catch transport failures and re-raise them as the integration's own types. A DNS outage on 2026-09-11 sent raw `requests.exceptions.ConnectionError` straight through `central_unit.py` entity updates and the `__init__.py` refresh timer, unhandled. No entity went unavailable; they logged and kept reporting stale values.
 - `check_response` logs "Something went wrong fetching user data" for every failing call regardless of which operation failed, which misleads anyone reading logs for a failed setpoint push.
 - `reloadDevices` returns `True` unconditionally, so `loadData` reports success even when every device load returned `None`.
 
