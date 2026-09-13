@@ -340,6 +340,41 @@ This is what the requirement that the climate entity and the target temperature
 sensor agree was protecting, and it was caught by looking at a real faulty
 device rather than by the tests, which had no case covering it.
 
+
+### What the first raw payload showed
+
+Diagnostics were built to make an undocumented API observable. The first export
+justified them immediately, and several things recorded above as unknown are now
+known.
+
+```
+  nom_appareil     "Verwarm.Therm"   the API DOES name a device
+  label_interface  "Verwarm.Therm"
+  temperature_sol  "2124"            the sentinel, on a HEALTHY device
+  programme        336 characters    48 half-hour slots x 7 days
+  time_boost       "7200"            the boost duration, as a field
+  puissance_app, fan_speed, fan_error, on_off, bit_override,
+  bundle_id, num_zone                all ignored by the integration
+  (no battery field anywhere)
+```
+
+**The sentinel is not about faults.** A healthy thermostat reports `2124` for
+`temperature_sol`, a floor probe it does not have, while reporting a perfectly
+good `temperature_air`. So `2124` means "this reading is not available", not
+"this device is broken". The faulty devices report it for `temperature_air`
+because they cannot measure air temperature. This is why a plausibility bound is
+the right mechanism: it catches the sentinel wherever it appears, without anyone
+having to know it is a fault code, which it is not.
+
+**There is no battery field.** Task 5.5a resolves negatively, which retrospectively
+confirms the decision to report a problem rather than a battery: the data to
+support a battery entity does not exist.
+
+**Device names exist**, which unblocks the entity naming deferred above.
+`nom_appareil` is likely a device type rather than a user-chosen name -- both
+fields read "Verwarm.Therm" here -- so whether it actually distinguishes two
+devices sharing a zone needs an export covering the receiver.
+
 ## Risks / Trade-offs
 
 **Changing a sensor's `native_unit_of_measurement` from °F to °C could disturb existing statistics.** → Lower risk than first assessed. The unit Home Assistant *reports* for these entities is already °C on a metric system, because `unit_of_measurement` is not overridden and performs the conversion; only the `native` unit changes, and the recorded values are identical either way. Statistics metadata tracks the reported unit, so the series should remain continuous. Verify on the reference installation before release rather than assuming it.

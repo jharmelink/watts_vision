@@ -2,16 +2,16 @@
   "domain": "watts_vision",
   "name": "Watts Vision",
   "codeowners": [
-      "@pwesters",
-      "@nowarries",
-      "@mirakels"
+    "@pwesters",
+    "@nowarries",
+    "@mirakels"
   ],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "https://github.com/pwesters/watts_vision",
+  "documentation": "https://github.com/jharmelink/watts_vision",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/pwesters/watts_vision/issues",
+  "issue_tracker": "https://github.com/jharmelink/watts_vision/issues",
   "requirements": [],
   "version": "0.5.0-rc1"
 }

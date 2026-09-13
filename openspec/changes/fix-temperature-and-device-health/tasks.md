@@ -32,7 +32,7 @@ None of these block implementation, and none require contact with Watts. Each is
 - [x] 4.3 Make the `gv_mode` to preset lookup total so an unmapped mode cannot destroy a climate or sensor entity, leaving the existing mode mapping unchanged
 - [x] 4.4 Gate creation of climate and target-temperature entities on the device supplying *usable* setpoint and range values — treating present-but-null the same as absent, since the reference receiver reports `consigne_confort` and `min_set_point` as null
 - [x] 4.5 Derive the device registry model from API data instead of hardcoding `BT-D03-RF` in the entity platforms and `BT-CT02-RF` in `central_unit.py`, leaving it unset when unknown
-- [ ] 4.6 (blocked on 5.5a) Distinguish entity names for multiple devices sharing a zone without relying on Home Assistant's numeric suffixing. Attempted with a fragment of the device id and abandoned: an opaque discriminator renames working entities and tells the user no more than `_2` did. Needs a real device name, and whether the API supplies one is unknown until a raw payload is read
+- [ ] 4.6 Distinguish entity names for devices sharing a zone using `nom_appareil`, now known to exist. Needs an export covering the receiver first: both name fields read "Verwarm.Therm" on the thermostat, so whether they actually differ between device types is unconfirmed. An opaque device-id fragment was tried and abandoned as no better than Home Assistant's `_2`
 - [x] 4.7 Verify every existing `unique_id` format is unchanged
 
 ## 5. Availability and battery
@@ -41,7 +41,7 @@ None of these block implementation, and none require contact with Watts. Each is
 - [x] 5.2 Derive measurement-entity availability from `error_code`, keeping setpoint entities available when their cached setpoints remain valid
 - [x] 5.3 Add a temperature plausibility bound as a backstop so unseen sentinels are suppressed without enumerating them
 - [x] 5.4 Add a fault entity per device using `BinarySensorDeviceClass.PROBLEM`, carrying the raw error code; do not present it as a battery condition
-- [ ] 5.5a Read a raw payload from diagnostics and check for two things the integration currently ignores: a battery field, and anything that names a device (see 4.6). Also test the bit-0 hypothesis the integration ignores, and test the bit-0 hypothesis: find a thermostat currently showing a low-battery warning on its own screen and read its `error_code`. Bit 0 set confirms a battery signal reaches the API; `0` proves it does not. Either way a genuine battery entity is proposed separately, not added here
+- [x] 5.5a Answered from the first diagnostics export: there is NO battery field, so a battery entity is not possible and the problem entity stands. Device names DO exist as `nom_appareil` and `label_interface`, which unblocks 4.6. The bit-0 hypothesis remains untestable without a device actually showing a low-battery warning the integration ignores, and test the bit-0 hypothesis: find a thermostat currently showing a low-battery warning on its own screen and read its `error_code`. Bit 0 set confirms a battery signal reaches the API; `0` proves it does not. Either way a genuine battery entity is proposed separately, not added here
 - [x] 5.5 Report entities as unavailable when a periodic refresh fails and no device data is available
 
 ## 6. Diagnostics

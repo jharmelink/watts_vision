@@ -1,4 +1,4 @@
-![GitHub release](https://img.shields.io/github/release/pwesters/watts_vision.svg) [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+![GitHub release](https://img.shields.io/github/release/jharmelink/watts_vision.svg) [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 
 # Watts Vision for Home Assistant
 
@@ -31,8 +31,40 @@ A Watts Vision system Cental unit is required to be able to see the settings rem
 
 ## HACS
 
-Add https://github.com/pwesters/watts_vision to the custom repositories in HACS. A new repository will be found. Click Download and restart Home Assistant. Go to Settings and then to Devices & Services. Click + Add Integration and search for Watts Vision.
+Add https://github.com/jharmelink/watts_vision to the custom repositories in HACS. A new repository will be found. Click Download and restart Home Assistant. Go to Settings and then to Devices & Services. Click + Add Integration and search for Watts Vision.
 
 ## Manual Installation
 
 Copy the watts_vision folder from custom_components to your custom_components folder of your home assistant instance, go to devices & services and click on '+ add integration'. In the new window search for Watts Vision and click on it. Fill out the form with your credentials for the watts vision smart home system.
+
+## What you get
+
+A device per thermostat, grouped under a device for the central unit, with:
+
+| Entity | What it is |
+|---|---|
+| Thermostat | Target temperature and preset mode. Setpoints step by 0.1 °C |
+| Air temperature | What the device measures |
+| Target temperature | The setpoint of whichever mode is active |
+| Heating mode | Comfort, eco, frost protection, boost, program, off |
+| Heating | Whether the device is currently calling for heat |
+| Problem | Whether the device is reporting a fault |
+| Error | What that fault is, with the raw code as an attribute |
+
+The central unit also gets a **Last communication** sensor.
+
+Not every device the central unit reports is a thermostat. A receiver has no setpoints, so it gets the entities that make sense for it and no thermostat. Where an entity is deliberately absent, the reason is in the log and in diagnostics.
+
+## When something is wrong
+
+Entities go **unavailable** rather than showing a wrong value. A device with a flat battery or a hardware fault stops reporting a temperature, and its *Problem* sensor turns on — so nothing invents a reading, and nothing lands in your long-term statistics that was never measured.
+
+The fault code is a bitfield and this integration only claims to understand the values it has evidence for. Anything else reads as *Unrecognised fault*, with the raw number kept as an attribute so it can be reported rather than guessed at.
+
+## Diagnostics
+
+Settings → Devices & Services → Watts Vision → ⋮ → **Download diagnostics**, or the same menu on an individual device.
+
+Because the API is undocumented, the export includes the raw device payloads as they arrive, alongside what the integration made of them and which entities it created or skipped. That is usually enough to explain any surprise without anyone having to reproduce it.
+
+Credentials are removed and identifiers are replaced with consistent stand-ins, so devices can still be told apart. Have a look before sharing it anyway.
