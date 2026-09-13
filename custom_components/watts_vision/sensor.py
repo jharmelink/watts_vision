@@ -18,7 +18,6 @@ from .device_state import (
     error_code,
     error_label,
     has_usable_setpoints,
-    is_faulty,
     iter_devices,
     target_celsius,
 )
@@ -188,10 +187,16 @@ class WattsVisionSetTemperatureSensor(WattsVisionSensor):
 
     async def async_update(self):
         device = self.device
-        self._attr_available = device is not None and not is_faulty(device)
+        target = target_celsius(device)
+        # Availability follows the value, not the device's health. A setpoint is
+        # configuration the cloud holds, not a measurement the device makes, so
+        # it stays knowable while the device is silent -- and the climate entity
+        # reports it either way. Tying this to the fault instead made the two
+        # disagree about the same number.
+        self._attr_available = target is not None
         # A mode with no target -- off, or one we do not recognise -- reports
         # unknown. It used to publish the literal string "nan".
-        self._attr_native_value = target_celsius(device)
+        self._attr_native_value = target
 
 
 class WattsVisionErrorSensor(WattsVisionSensor):

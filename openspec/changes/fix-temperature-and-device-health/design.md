@@ -319,6 +319,27 @@ Recorded so they are not re-investigated. Each was a plausible theory about the 
 - **`min_set_point` / `max_set_point` decode correctly.** `410` and `986` give 5.0 °C and 37.0 °C, a sensible thermostat range. Not a source of error.
 - **The 100.2 °C reading is not a conversion bug.** The climate entity and the sensor entity reach it by entirely different code paths and agree exactly, which means the value is faithful to the source data. The fault is upstream of the integration.
 
+### Availability follows the value, not the device
+
+A first implementation tied every entity's availability to whether the device
+was faulty, and the reference installation showed why that is wrong: a faulty
+device's thermostat card reported a target temperature while the target
+temperature sensor beside it read unavailable, for the same number.
+
+**Chosen:** distinguish what the device *measures* from what the cloud *holds*.
+
+```
+  air temperature, heating state    a measurement the device makes
+                                    → unavailable when it cannot make it
+
+  heating mode, target temperature  configuration the cloud holds
+                                    → still knowable while the device is silent
+```
+
+This is what the requirement that the climate entity and the target temperature
+sensor agree was protecting, and it was caught by looking at a real faulty
+device rather than by the tests, which had no case covering it.
+
 ## Risks / Trade-offs
 
 **Changing a sensor's `native_unit_of_measurement` from °F to °C could disturb existing statistics.** → Lower risk than first assessed. The unit Home Assistant *reports* for these entities is already °C on a metric system, because `unit_of_measurement` is not overridden and performs the conversion; only the `native` unit changes, and the recorded values are identical either way. Statistics metadata tracks the reported unit, so the series should remain continuous. Verify on the reference installation before release rather than assuming it.

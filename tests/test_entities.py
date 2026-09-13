@@ -119,6 +119,41 @@ async def test_a_receiver_keeps_the_entities_it_can_support(
     assert hass.states.get("sensor.thermostat_woonkamer_error_woonkamer_2") is not None
 
 
+async def test_climate_and_sensor_agree_on_the_target(hass: HomeAssistant, loaded):
+    """The spec requires these to report the same number, and they did not.
+
+    Availability was tied to the device's health, so a faulty device showed a
+    target on its thermostat card and "unavailable" on the sensor beside it.
+    A setpoint is configuration the cloud holds, not a measurement the device
+    makes, so it stays knowable while the device is silent.
+    """
+    for zone in ("woonkamer", "studio"):
+        climate = hass.states.get(f"climate.thermostat_{zone}")
+        sensor = hass.states.get(f"sensor.thermostat_{zone}_target_temperature_{zone}")
+        assert climate is not None and sensor is not None
+        assert sensor.state != "unavailable"
+        assert float(sensor.state) == pytest.approx(climate.attributes["temperature"])
+
+
+async def test_a_faulty_device_keeps_the_setpoints_the_cloud_holds(
+    hass: HomeAssistant, loaded
+):
+    """Its measurements go away; what was configured for it does not."""
+    assert hass.states.get("sensor.thermostat_studio_air_temperature_studio").state == (
+        "unavailable"
+    )
+    assert hass.states.get("binary_sensor.thermostat_studio_heating_studio").state == (
+        "unavailable"
+    )
+    assert hass.states.get("sensor.thermostat_studio_heating_mode_studio").state == (
+        "comfort"
+    )
+    assert (
+        hass.states.get("sensor.thermostat_studio_target_temperature_studio").state
+        != "unavailable"
+    )
+
+
 async def test_no_entity_publishes_nan(hass: HomeAssistant, loaded):
     """`if self._state != NaN` was always true, so nan reached the state."""
     for state in hass.states.async_all():

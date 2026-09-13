@@ -70,8 +70,7 @@ async def async_setup_entry(
         # is what made it crash and disappear.
         if not has_usable_setpoints(device):
             _LOGGER.info(
-                "Device %s in %s reports no setpoints, so it gets no climate "
-                "entity",
+                "Device %s in %s reports no setpoints, so it gets no climate " "entity",
                 device["id"],
                 label,
             )
