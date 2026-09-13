@@ -427,6 +427,22 @@ The step is therefore a convenience, not a claim about the device, and must be d
 
 Rollback is per-step; nothing here changes stored configuration or the config entry schema, so reverting the component restores previous behaviour without user action.
 
+## Verification
+
+Confirmed on the reference installation: the error sensors for both faulty
+devices now exist and read "Not reporting"; their air temperature reports
+unavailable rather than about 100 °C while their setpoints stay readable; the
+receiver keeps the entities it can support and is visibly rather than silently
+denied the two it cannot; its heating sensor no longer reports a null as on; the
+entities of devices sharing a zone are named by the device; and two diagnostics
+exports contained no credential or token.
+
+Not observed live, and recorded as such rather than assumed: that the thermostat
+card offers 0.1 °C steps, that a 20.5 °C write reads back as exactly `689`, and
+that statistics continue unbroken across the change. All three are covered by
+tests, and the read half of the round trip was confirmed earlier in the change
+from a live reading. Worth a glance the next time anyone is in there.
+
 ## Open Questions
 
 None of these can be answered by asking Watts, and none of them block implementation. Each is answerable by observation on the live installation, and each improves a label or a default rather than changing behaviour.

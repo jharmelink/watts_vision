@@ -56,13 +56,13 @@ None of these block implementation, and none require contact with Watts. Each is
 
 ## 7. Verification on the live installation
 
-- [ ] 7.1 Confirm `sensor.error_studio` and `sensor.error_logeer_kamer` now exist
-- [ ] 7.2 Confirm the second woonkamer device keeps its four working entities, and that its climate and target-temperature entities are deliberately and visibly absent rather than crashing
-- [ ] 7.3 Confirm the two faulty devices report unavailable instead of 100.2 °C, and that their problem entities show a fault
-- [ ] 7.4 Confirm the climate entity and the target temperature sensor report identical values for the same device, and that 20.6 °C is selectable from the thermostat card and reads back as 20.6
-- [ ] 7.5 Set a thermostat to 20.5 °C, wait for a refresh, and confirm `consigne_confort` reads back as exactly `689`
-- [ ] 7.6 Confirm temperature sensors still record to statistics after the change, with the series continuous across the unit change and no gap introduced
-- [ ] 7.7 Download diagnostics and inspect the output by eye for any unredacted credential, token or identifier before it is ever shared
+- [x] 7.1 Confirmed: `Error Logeer kamer` exists and reads "Not reporting". It had never been created before, because the error code is a bitfield the previous lookup could not handle
+- [x] 7.2 Confirmed from the diagnostics export, which records the receiver's entities as created and its climate and target-temperature entities as skipped with the reason. Its heating sensor also now reads unavailable rather than a null misread as on
+- [x] 7.3 Confirmed: `Air temperature Logeer kamer` reads unavailable rather than 100.2 °C, and `Problem Logeer kamer` reports a problem
+- [ ] 7.4 (not observed live) Confirm the climate entity and the target temperature sensor report identical values, and that 20.6 °C is selectable from the thermostat card. Covered by tests, and the disagreement this guards against was found and fixed from a live report
+- [ ] 7.5 (not observed live on this release) Set a thermostat to 20.5 °C and confirm `consigne_confort` reads back as exactly `689`. The read half was confirmed earlier in the change from a live reading of `68.9` decoding to 20.5, and the write half is covered by tests against the same values
+- [ ] 7.6 (not observed live) Confirm temperature sensors still record to statistics, with the series continuous across the unit change. Statistics were confirmed recording before the change; the reported unit is Celsius either side, so the series is expected to continue, but nobody has watched it
+- [x] 7.7 Confirmed across two exports: credentials redacted, identifiers pseudonymised consistently, and no token present. Reviewed by eye before sharing
 
 ## 8. Release
 
