@@ -1,0 +1,67 @@
+schema: spec-driven
+
+context: |
+  Home Assistant custom integration (HACS) for the **Watts Vision** smart home
+  heating system — the original generation, NOT Watts Vision+.
+
+  ## Scope: legacy hardware only
+
+  This project targets the original Watts Vision platform:
+
+  - Gateway / central unit: BT-CT02-RF and older units on the same cloud
+  - Cloud API: smarthome.wattselectronics.com, /api/v0.1/human/...
+  - Auth: Keycloak at auth.smarthome.wattselectronics.com, realm "watts"
+  - Sub-devices: BT-D03-RF thermostats and whatever else the gateway reports
+
+  **Watts Vision+ is out of scope.** The newer generation — BT-CT03-RF and
+  BT-ST03-RF gateways, the Azure AD B2C platform at prod-vision.watts.io — is
+  served by the official vendor-maintained core integration `watts`, added in
+  Home Assistant 2026.1 at Platinum quality tier and built by Watts employees.
+
+  Do not add Vision+ support here, and do not propose migrating this
+  integration to the Vision+ API. The gateway, not the thermostat, determines
+  the platform: a BT-D03-RF thermostat appears on the official integration's
+  supported device list, but paired to a BT-CT02-RF gateway it can only reach
+  the legacy cloud. Users of this integration have hardware that cannot move.
+
+  ## What the scope implies
+
+  This repository is the only maintained path for the BT-CT02-RF installed
+  base. The upstream API is undocumented, third-party and unreachable: no
+  specification, no contact with its developers, no notice of change, and no
+  vendor incentive to fix a superseded platform. Nobody upstream will fix a
+  bug found here.
+
+  Therefore:
+
+  - Treat every value the API returns as untrusted input. Unknown error codes,
+    absent fields and unexpected device types are normal operating conditions,
+    not exceptional ones. Any lookup, cast or index over API data must be total.
+  - Never encode an unverified guess as fact. Where a value's meaning is
+    unknown, report the raw value and describe it as unrecognised.
+  - Degrade to `unavailable` rather than crashing or inventing data. An entity
+    that silently disappears, or that publishes a plausible-looking wrong
+    number, is worse than one that admits it does not know.
+  - Record provenance for anything inferred from third-party implementations
+    or from observing a single installation.
+
+  ## Reference implementations
+
+  Useful as evidence, never as authority. They observed devices we cannot, but
+  they are themselves reverse-engineered and may target the newer platform:
+
+  - Official core integration `watts` (Vision+ only, vendor-authored):
+    homeassistant/components/watts in home-assistant/core, library
+    visionpluspython. Authoritative on domain concepts, not on legacy wire
+    format.
+  - Unofficial Homey app: github.com/idleprocess-zero/watts-vision-homey-app
+    Covers both platforms with one set of constants; disagrees with this
+    integration on operating mode codes.
+  - Home Assistant community thread 114040.
+
+  ## Tech stack
+
+  - Python, Home Assistant custom component under custom_components/watts_vision/
+  - Platforms: climate, sensor, binary_sensor
+  - Tests: pytest with pytest-homeassistant-custom-component
+  - Distributed via HACS as a custom repository
