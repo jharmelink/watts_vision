@@ -41,5 +41,21 @@
         "description": "Reconfigure account details and reconnect to the Watts Vision API"
       }
     }
+  },
+  "services": {
+    "start_boost": {
+      "name": "Start boost",
+      "description": "Heat at the boost setpoint for a set time. Without a duration the device is boosted for two hours, which is what this integration has always sent.",
+      "fields": {
+        "duration": {
+          "name": "Duration",
+          "description": "How many minutes to boost for."
+        }
+      }
+    },
+    "stop_boost": {
+      "name": "Stop boost",
+      "description": "End a boost early and return to the mode that was active before it, without changing that mode's setpoint."
+    }
   }
 }

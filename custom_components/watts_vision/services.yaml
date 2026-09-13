@@ -1,0 +1,21 @@
+start_boost:
+  target:
+    entity:
+      domain: climate
+      integration: watts_vision
+  fields:
+    duration:
+      example: 60
+      default: 120
+      selector:
+        number:
+          min: 1
+          max: 1440
+          unit_of_measurement: min
+          mode: box
+
+stop_boost:
+  target:
+    entity:
+      domain: climate
+      integration: watts_vision

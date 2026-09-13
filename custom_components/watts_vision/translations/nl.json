@@ -41,5 +41,21 @@
         "description": "Accountgegevens opnieuw configureren en opnieuw verbinden met de Watts Visie API"
       }
     }
+  },
+  "services": {
+    "start_boost": {
+      "name": "Boost starten",
+      "description": "Verwarm gedurende een ingestelde tijd op de boost-temperatuur. Zonder duur wordt twee uur gebruikt, zoals deze integratie altijd heeft verstuurd.",
+      "fields": {
+        "duration": {
+          "name": "Duur",
+          "description": "Het aantal minuten dat geboost wordt."
+        }
+      }
+    },
+    "stop_boost": {
+      "name": "Boost stoppen",
+      "description": "Beëindig een boost vroegtijdig en keer terug naar de modus die daarvoor actief was, zonder de temperatuur van die modus te wijzigen."
+    }
   }
 }

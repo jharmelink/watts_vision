@@ -86,6 +86,25 @@ The hardcoded `446` may be correct — 7.0 °C is the conventional frost-protect
 
 **Chosen:** try writing a different frost-protection value on hardware and observe whether the device accepts it. If it does, stop substituting and let the user choose within the device's own range. If it refuses, keep `446` but make the entity refuse the request rather than silently substituting, and say why.
 
+### What the software half could settle without hardware
+
+Groups 4 and 6 turned out not to depend on the numbering being confirmed, and
+were implemented first.
+
+Program mode's missing branch resolved itself once a raw payload existed: the
+`programme` field is the weekly schedule, 48 half-hour slots across seven days,
+so in that mode the schedule owns the setpoint and none should be sent. The
+absent branch was therefore the right behaviour arrived at by accident, and it
+now says so explicitly rather than falling through to an empty payload while its
+caller computed a value that was discarded. That `gv_mode 11` does write
+`consigne_manuel` fits a manual override of a running programme, which is a
+coherent reading of the pair.
+
+Stopping a boost re-sends the setpoint the target mode already holds rather than
+sending a mode with no setpoint at all. Whether the API accepts the latter is
+unknown, and a live heating system is not where to find out. The effect is the
+same -- nothing changes -- at the cost of one redundant field.
+
 ## Risks / Trade-offs
 
 **This change requires manipulating a live heating system.** → The only change in the project that does. Cycling a thermostat through every mode in a house that is being heated is disruptive and, in winter, potentially damaging if a room is left in frost protection by accident. Do it outside heating season, on one device, in a room where the outcome does not matter, and record the starting state so it can be restored.

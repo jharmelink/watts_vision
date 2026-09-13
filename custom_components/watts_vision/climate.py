@@ -12,6 +12,8 @@ from homeassistant.components.climate.const import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv, entity_platform
+import voluptuous as vol
 
 from .const import (
     API_CLIENT,
@@ -34,6 +36,15 @@ from .watts_api import WattsApi
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _as_int(value):
+    """Return an int, or None for anything the device did not supply."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 # The device stores tenths of a degree Fahrenheit, roughly 0.056 C, so no
 # Celsius step is exact. 0.1 C is offered as a usability choice -- it keeps
 # every value a user is likely to want reachable from the card -- and is not a
@@ -44,6 +55,21 @@ TARGET_TEMPERATURE_STEP = 0.1
 
 # 7.0 C, the frost protection setpoint the device holds in that mode.
 DEFROST_DECI_F = "446"
+
+GV_MODE_BOOST = "4"
+
+# Two hours, matching what the integration sent before the duration could be
+# chosen. Documented rather than merely defaulted, because selecting the plain
+# boost preset still has to mean something.
+DEFAULT_BOOST_MINUTES = 120
+
+# Where a boost returns to when nothing remembers what preceded it, which is the
+# case after a restart. Comfort is the safe answer: it is the mode a thermostat
+# is normally in, and it cannot leave a room unheated by accident.
+FALLBACK_MODE_AFTER_BOOST = "0"
+
+SERVICE_START_BOOST = "start_boost"
+SERVICE_STOP_BOOST = "stop_boost"
 
 # Which setpoint a mode writes when it is entered.
 SETPOINT_TO_WRITE = {
@@ -86,6 +112,18 @@ async def async_setup_entry(
         )
 
     async_add_entities(devices, update_before_add=True)
+
+    # Boost has a duration, and Home Assistant's climate entity has no way to
+    # express that: set_preset_mode takes a name and nothing else. The official
+    # Watts Vision+ integration reaches the same conclusion and exposes a timer
+    # service, so this is the shape the vendor's own model wants too.
+    platform = entity_platform.async_get_current_platform()
+    platform.async_register_entity_service(
+        SERVICE_START_BOOST,
+        {vol.Optional("duration"): vol.All(cv.positive_int, vol.Range(min=1))},
+        "async_start_boost",
+    )
+    platform.async_register_entity_service(SERVICE_STOP_BOOST, {}, "async_stop_boost")
 
 
 class WattsThermostat(ClimateEntity):
@@ -177,6 +215,14 @@ class WattsThermostat(ClimateEntity):
             )
         self._attr_extra_state_attributes["gv_mode"] = device.get("gv_mode")
 
+        # How long a boost has left. The field varies per device, between one
+        # and two hours on the reference installation, which is what showed the
+        # duration was never fixed at the two hours this integration sent.
+        boosting = str(device.get("gv_mode")) == GV_MODE_BOOST
+        self._attr_extra_state_attributes["boost_seconds_remaining"] = (
+            _as_int(device.get("time_boost")) if boosting else None
+        )
+
     def _setpoint_for(self, gv_mode: str) -> str:
         """Return the deci-Fahrenheit value to send when entering a mode.
 
@@ -190,9 +236,14 @@ class WattsThermostat(ClimateEntity):
         celsius = deci_f_to_celsius(device.get(field))
         return celsius_to_deci_f(celsius) if celsius is not None else "0"
 
-    async def _push(self, value: str, gv_mode: str):
+    async def _push(self, value: str, gv_mode: str, boost_seconds: int | None = None):
         func = functools.partial(
-            self.client.pushTemperature, self.smartHome, self.deviceID, value, gv_mode
+            self.client.pushTemperature,
+            self.smartHome,
+            self.deviceID,
+            value,
+            gv_mode,
+            boost_seconds,
         )
         await self.hass.async_add_executor_job(func)
 
@@ -223,6 +274,43 @@ class WattsThermostat(ClimateEntity):
             return
 
         await self._push(self._setpoint_for(gv_mode), gv_mode)
+
+    def _remember_current_mode(self):
+        """Record the mode to come back to, before leaving it."""
+        self._attr_extra_state_attributes["previous_gv_mode"] = (
+            self._attr_extra_state_attributes.get("gv_mode")
+            or FALLBACK_MODE_AFTER_BOOST
+        )
+
+    async def async_start_boost(self, duration: int | None = None):
+        """Boost for a given number of minutes, defaulting to two hours."""
+        minutes = duration or DEFAULT_BOOST_MINUTES
+        self._remember_current_mode()
+        await self._push(
+            self._setpoint_for(GV_MODE_BOOST),
+            GV_MODE_BOOST,
+            boost_seconds=minutes * 60,
+        )
+
+    async def async_stop_boost(self):
+        """End a boost early and return to the mode that preceded it.
+
+        Selecting another preset would also rewrite that preset's setpoint,
+        which is not something the user asked for. The value sent here is the
+        one the device already holds for the mode being returned to, so nothing
+        changes -- whether the API accepts a mode change carrying no setpoint at
+        all is unknown, and this avoids finding out the hard way.
+        """
+        device = self.device
+        if device is None or str(device.get("gv_mode")) != GV_MODE_BOOST:
+            _LOGGER.debug("Device %s is not boosting, nothing to stop", self.id)
+            return
+
+        previous = (
+            self._attr_extra_state_attributes.get("previous_gv_mode")
+            or FALLBACK_MODE_AFTER_BOOST
+        )
+        await self._push(self._setpoint_for(previous), previous)
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""

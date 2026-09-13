@@ -40,6 +40,9 @@ REQUEST_TIMEOUT = 30
 # scope for this module's error handling.
 LANG = "nl_NL"
 
+# Two hours, which is what this integration has always sent for a boost.
+DEFAULT_BOOST_SECONDS = 7200
+
 
 class WattsApi:
     """Interface to the Watts API."""
@@ -271,9 +274,18 @@ class WattsApi:
         return None
 
     def pushTemperature(
-        self, smarthome: str, deviceID: str, value: str, gvMode: str
+        self,
+        smarthome: str,
+        deviceID: str,
+        value: str,
+        gvMode: str,
+        boostSeconds: int | None = None,
     ) -> bool:
-        """Send a setpoint and mode to a device."""
+        """Send a setpoint and mode to a device.
+
+        `boostSeconds` applies only to boost mode. Without it the device is
+        given the two hours this integration has always sent.
+        """
         query = {
             "context": "1",
             "smarthome_id": smarthome,
@@ -304,10 +316,16 @@ class WattsApi:
             }
         elif gvMode == "4":
             extra = {
-                "query[time_boost]": "7200",
+                "query[time_boost]": str(boostSeconds or DEFAULT_BOOST_SECONDS),
                 "query[consigne_boost]": value,
                 "query[consigne_manuel]": value,
             }
+        elif gvMode == "8":
+            # Program mode: the weekly schedule owns the setpoint, so none is
+            # sent. This branch exists to say that deliberately -- the mode
+            # previously fell through the chain to an empty payload, and the
+            # setpoint its caller had computed was discarded in silence.
+            extra = {}
         elif gvMode == "11":
             extra = {"query[consigne_manuel]": value}
         query.update(extra)

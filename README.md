@@ -7,6 +7,10 @@ These are my first steps in creating an add on for home assistant and learning p
 
 I'm learning by doing. Please be kind.
 
+> **Stopping a boost is done** — see [Boost](#boost) below. Setting a boost's duration works too, rather than always getting two hours.
+>
+> Program mode can be selected and read, but the weekly schedule itself still cannot be edited from Home Assistant. The schedule turns out to be in the data the integration already receives — 48 half-hour slots across seven days — so it is no longer out of reach, just unwritten.
+
 ## Which integration do you need?
 
 This integration is for the **original Watts Vision** system. If you have **Watts Vision+**, use the official [Watts Vision +](https://www.home-assistant.io/integrations/watts/) integration instead — it is built and maintained by Watts, ships with Home Assistant, and needs no HACS.
@@ -60,6 +64,30 @@ Not every device the central unit reports is a thermostat. A receiver has no set
 Entities go **unavailable** rather than showing a wrong value. A device with a flat battery or a hardware fault stops reporting a temperature, and its *Problem* sensor turns on — so nothing invents a reading, and nothing lands in your long-term statistics that was never measured.
 
 The fault code is a bitfield and this integration only claims to understand the values it has evidence for. Anything else reads as *Unrecognised fault*, with the raw number kept as an attribute so it can be reported rather than guessed at.
+
+## Boost
+
+A boost heats at the boost setpoint for a while and then returns to whatever was running before. Selecting the **boost** preset still gives the two hours this integration has always sent, but you can now choose:
+
+```yaml
+action: watts_vision.start_boost
+target:
+  entity_id: climate.thermostat_woonkamer
+data:
+  duration: 45        # minutes
+```
+
+And end one early, which previously meant selecting another preset — and that also rewrote the preset's setpoint, which was rarely what anyone wanted:
+
+```yaml
+action: watts_vision.stop_boost
+target:
+  entity_id: climate.thermostat_woonkamer
+```
+
+Stopping returns the thermostat to the mode that was active before the boost, without changing that mode's temperature. If nothing remembers what that was — after a Home Assistant restart, say — it returns to comfort.
+
+While a boost is running, the thermostat's `boost_seconds_remaining` attribute counts it down.
 
 ## Diagnostics
 
